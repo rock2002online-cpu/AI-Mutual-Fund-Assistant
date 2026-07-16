@@ -5512,10 +5512,10 @@ Scheme Code,ISIN Div,ISIN Growth,Fund,NAV,Date
 149086,INF760K01JY0,INF760K01JX2,Canara Robeco Value Fund - Direct Plan - IDCW (Payout/Reinvestment),18.18,15-Jul-2026
 149088,INF760K01JZ7,-,Canara Robeco Value Fund - Regular Plan - Growth Option,17.92,15-Jul-2026
 149087,INF760K01KB6,INF760K01KA8,Canara Robeco Value Fund - Regular Plan - IDCW (Payout/Reinvestment),16.85,15-Jul-2026
-148595,INF740KA1PP3,-,DSP Value Fund - Direct Plan - Growth,24.836,14-Jul-2026
-148596,INF740KA1PQ1,INF740KA1PR9,DSP Value Fund - Direct Plan - IDCW,18.812,14-Jul-2026
-148594,INF740KA1PM0,-,DSP Value Fund - Regular Plan - Growth,23.783,14-Jul-2026
-148597,INF740KA1PN8,INF740KA1PO6,DSP Value Fund - Regular Plan - IDCW,16.622,14-Jul-2026
+148595,INF740KA1PP3,-,DSP Value Fund - Direct Plan - Growth,24.934,15-Jul-2026
+148596,INF740KA1PQ1,INF740KA1PR9,DSP Value Fund - Direct Plan - IDCW,18.886,15-Jul-2026
+148594,INF740KA1PM0,-,DSP Value Fund - Regular Plan - Growth,23.875,15-Jul-2026
+148597,INF740KA1PN8,INF740KA1PO6,DSP Value Fund - Regular Plan - IDCW,16.687,15-Jul-2026
 118494,INF090I01GY2,-,Templeton India Value Fund - Direct - Growth,793.9742,15-Jul-2026
 118493,INF090I01GW6,INF090I01GX4,Templeton India Value Fund - Direct - IDCW ,107.692,15-Jul-2026
 100496,INF090I01296,-,Templeton India Value Fund - Growth Plan,703.8293,15-Jul-2026
@@ -6881,10 +6881,10 @@ Scheme Code,ISIN Div,ISIN Growth,Fund,NAV,Date
 119746,INF174K01MW2,-,Kotak Money Market Fund - (Growth) - Direct,4842.9241,15-Jul-2026
 101892,INF174K018O0,INF174K01NB4,Kotak Money market Fund - (Monthly Payout of Income Distribution cum capital withdrawal option),1050.3084,15-Jul-2026
 119747,INF174K019O8,INF174K01MX0,Kotak Money Market Fund - (Monthly Payout of Income Distribution cum capital withdrawal option) - Direct,1287.9821,15-Jul-2026
-154416,-,INF2KCX01061,Choice Overnight Fund - Daily IDCW Option - Direct Plan,100.1703,15-Jul-2026
-154414,-,INF2KCX01079,Choice Overnight Fund - Daily IDCW Option - Regular Plan,100.1668,15-Jul-2026
-154413,INF2KCX01087,-,Choice Overnight Fund - Growth Option - Direct Plan,100.1703,15-Jul-2026
-154415,INF2KCX01095,-,Choice Overnight Fund - Growth Option - Regular Plan,100.1668,15-Jul-2026
+154416,-,INF2KCX01061,Choice Overnight Fund - Daily IDCW Option - Direct Plan,100.1842,16-Jul-2026
+154414,-,INF2KCX01079,Choice Overnight Fund - Daily IDCW Option - Regular Plan,100.1804,16-Jul-2026
+154413,INF2KCX01087,-,Choice Overnight Fund - Growth Option - Direct Plan,100.1842,16-Jul-2026
+154415,INF2KCX01095,-,Choice Overnight Fund - Growth Option - Regular Plan,100.1804,16-Jul-2026
 152151,INF0R8701087,-,Helios Overnight Fund - Direct Plan - Daily IDCW Option,1000.0,15-Jul-2026
 152152,INF0R8701079,-,Helios Overnight Fund - Direct Plan - Growth Option,1172.1285,15-Jul-2026
 152154,INF0R8701103,-,Helios Overnight Fund - Regular Plan - Daily IDCW Option,1000.0,15-Jul-2026
@@ -7481,14 +7481,14 @@ Scheme Code,ISIN Div,ISIN Growth,Fund,NAV,Date
 153011,INF0R8F01083,-,Zerodha Gold ETF FoF-Direct Plan - Growth Option,18.4016,15-Jul-2026
 153757,INF0R8F01117,-,Zerodha Multi Asset Passive FoF - Direct - Growth,11.3466,15-Jul-2026
 153656,INF0R8F01109,-,Zerodha Silver ETF FoF - Direct Growth,19.9081,15-Jul-2026
-132141,INF084M01EC8,INF084M01ED6,Aditya Birla Sun Life Global Emerging Opportunities Fund - Direct - IDCW,31.8398,14-Jul-2026
-132140,INF084M01EB0,-,Aditya Birla Sun Life Global Emerging Opportunities Fund - Direct plan - Growth Option,35.9996,14-Jul-2026
-132139,INF084M01AU8,INF084M01AV6,Aditya Birla Sun Life Global Emerging Opportunities Fund - Regular - IDCW,34.2141,14-Jul-2026
-132138,INF084M01AT0,-,Aditya Birla SUn Life Global Emerging Opportunities Fund - Regular Plan - Growth Option,34.2079,14-Jul-2026
-132009,INF084M01EH7,-,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund - Retail Plan - Direct Plan - Growth Option,47.2832,14-Jul-2026
-132005,INF084M01AZ7,-,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund- Retail Plan - Regular Plan - Growth Option,44.1951,14-Jul-2026
-132010,INF084M01EI5,INF084M01EJ3,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund-DIRECT - RETAIL - IDCW,47.3074,14-Jul-2026
-132003,INF084M01BA8,INF084M01BB6,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund-REGULAR - RETAIL - IDCW,44.2225,14-Jul-2026
+132141,INF084M01EC8,INF084M01ED6,Aditya Birla Sun Life Global Emerging Opportunities Fund - Direct - IDCW,31.9475,15-Jul-2026
+132140,INF084M01EB0,-,Aditya Birla Sun Life Global Emerging Opportunities Fund - Direct plan - Growth Option,36.1214,15-Jul-2026
+132139,INF084M01AU8,INF084M01AV6,Aditya Birla Sun Life Global Emerging Opportunities Fund - Regular - IDCW,34.3293,15-Jul-2026
+132138,INF084M01AT0,-,Aditya Birla SUn Life Global Emerging Opportunities Fund - Regular Plan - Growth Option,34.3232,15-Jul-2026
+132009,INF084M01EH7,-,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund - Retail Plan - Direct Plan - Growth Option,47.3168,15-Jul-2026
+132005,INF084M01AZ7,-,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund- Retail Plan - Regular Plan - Growth Option,44.2258,15-Jul-2026
+132010,INF084M01EI5,INF084M01EJ3,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund-DIRECT - RETAIL - IDCW,47.341,15-Jul-2026
+132003,INF084M01BA8,INF084M01BB6,Aditya Birla Sun Life Global Excellence Equity Fund Of Fund-REGULAR - RETAIL - IDCW,44.2532,15-Jul-2026
 152140,INF209KB16W7,-,Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Fund Of Funds-Direct Growth,12.9623,15-Jul-2026
 152139,INF209KB17W5,INF209KB18W3,Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Fund Of Funds-Direct IDCW Payout,12.9623,15-Jul-2026
 152142,INF209KB13W4,-,Aditya Birla Sun Life US Treasury 1-3 Year Bond ETFs Fund Of Funds-Regular Growth,12.946,15-Jul-2026
@@ -7533,10 +7533,10 @@ Scheme Code,ISIN Div,ISIN Growth,Fund,NAV,Date
 112126,INF740K01284,-,DSP Global Clean Energy Overseas Equity Omni FoF - Regular Plan - Growth,29.7581,15-Jul-2026
 112127,INF740K01292,INF740K01300,DSP Global Clean Energy Overseas Equity Omni FoF - Regular Plan - IDCW,20.6912,15-Jul-2026
 119275,INF740K01PC5,-,DSP Global Clean Energy Overseas Equity Omni FoF Direct Plan - Growth,31.5137,15-Jul-2026
-149816,INF740KA1QP1,-,DSP Global Innovation Overseas Equity Omni FoF - Direct - Growth,22.8964,14-Jul-2026
-149815,INF740KA1QQ9,INF740KA1QR7,DSP Global Innovation Overseas Equity Omni FoF - Direct - IDCW,22.8964,14-Jul-2026
-149817,INF740KA1QM8,-,DSP Global Innovation Overseas Equity Omni FoF - Regular - Growth,21.9981,14-Jul-2026
-149814,INF740KA1QN6,INF740KA1QO4,DSP Global Innovation Overseas Equity Omni FoF - Regular - IDCW,21.9981,14-Jul-2026
+149816,INF740KA1QP1,-,DSP Global Innovation Overseas Equity Omni FoF - Direct - Growth,22.9195,15-Jul-2026
+149815,INF740KA1QQ9,INF740KA1QR7,DSP Global Innovation Overseas Equity Omni FoF - Direct - IDCW,22.9195,15-Jul-2026
+149817,INF740KA1QM8,-,DSP Global Innovation Overseas Equity Omni FoF - Regular - Growth,22.0198,15-Jul-2026
+149814,INF740KA1QN6,INF740KA1QO4,DSP Global Innovation Overseas Equity Omni FoF - Regular - IDCW,22.0198,15-Jul-2026
 152528,INF740KA1UJ6,-,DSP US Specific Debt Passive FoF - Direct - Growth,12.6855,15-Jul-2026
 152529,INF740KA1UK4,INF740KA1UL2,DSP US Specific Debt Passive FoF - Direct - IDCW,12.6855,15-Jul-2026
 152527,INF740KA1UG2,-,DSP US Specific Debt Passive FoF - Regular - Growth,12.6707,15-Jul-2026
@@ -7680,7 +7680,7 @@ Scheme Code,ISIN Div,ISIN Growth,Fund,NAV,Date
 113076,INF109KC1NT3,-,ICICI Prudential Gold ETF,120.6422,15-Jul-2026
 112368,INF205KA1BP1,-,Invesco India Gold Exchange Traded Fund,122.4869,15-Jul-2026
 106193,INF174KA1HJ8,-,KOTAK GOLD ETF,117.5523,15-Jul-2026
-151961,INF767K01SM1,-,LIC MF Gold Exchange Traded Fund,126.9439,15-Jul-2026
+151961,INF767K01SM1,-,LIC MF Gold Exchange Traded Fund,127.0806,16-Jul-2026
 151416,INF769K01JP9,-,Mirae Asset Gold ETF,136.9665,15-Jul-2026
 153780,INF247L01FY4,-,Motilal Oswal Gold ETF,139.4033,15-Jul-2026
 140088,INF204KB17I5,-,Nippon India ETF Gold BeES,116.4965,15-Jul-2026
