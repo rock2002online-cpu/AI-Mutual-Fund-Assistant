@@ -3,3 +3,5 @@ openpyxl
 requests
 plotly>=5.20.0
 reportlab>=4.2,<5.0
+SQLAlchemy>=2.0,<3.0
+alembic>=1.18,<2.0
