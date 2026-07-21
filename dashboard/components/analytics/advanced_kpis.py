@@ -536,6 +536,116 @@ def build_advanced_kpis(
     )
 
 
+def build_institutional_kpis(
+    service_result: AdvancedAnalyticsServiceResult,
+) -> tuple[AdvancedKPI, ...]:
+    """Build benchmark-aware institutional KPI presentation models."""
+
+    if not isinstance(
+        service_result,
+        AdvancedAnalyticsServiceResult,
+    ):
+        raise TypeError(
+            "service_result must be an instance of "
+            "AdvancedAnalyticsServiceResult."
+        )
+
+    analytics = service_result.analytics
+    benchmark = (
+        analytics.benchmark
+        if analytics is not None
+        else None
+    )
+
+    beta = (
+        benchmark.beta
+        if benchmark is not None
+        else None
+    )
+
+    alpha_percent = (
+        benchmark.alpha_percent
+        if benchmark is not None
+        else None
+    )
+
+    tracking_error_percent = (
+        benchmark.tracking_error_percent
+        if benchmark is not None
+        else None
+    )
+
+    capture_spread = (
+        benchmark.upside_capture_ratio
+        - benchmark.downside_capture_ratio
+        if benchmark is not None
+        else None
+    )
+
+    benchmark_name = (
+        benchmark.benchmark_name
+        if benchmark is not None
+        else None
+    )
+
+    benchmark_delta = (
+        f"Relative to {benchmark_name}"
+        if benchmark_name
+        else (
+            "Benchmark-relative metric"
+            if benchmark is not None
+            else "Benchmark data unavailable"
+        )
+    )
+
+    return (
+        AdvancedKPI(
+            label="Portfolio Beta",
+            value=_format_ratio(beta),
+            delta=benchmark_delta,
+            help_text=(
+                "Portfolio sensitivity to benchmark movements. "
+                "A beta of 1.00 indicates benchmark-level sensitivity."
+            ),
+            status=_classify_risk_value(beta),
+        ),
+        AdvancedKPI(
+            label="Jensen's Alpha",
+            value=_format_percentage(alpha_percent),
+            delta=benchmark_delta,
+            help_text=(
+                "Risk-adjusted return above the return implied by the "
+                "portfolio's benchmark sensitivity."
+            ),
+            status=_classify_signed_value(alpha_percent),
+        ),
+        AdvancedKPI(
+            label="Tracking Error",
+            value=_format_percentage(tracking_error_percent),
+            delta=benchmark_delta,
+            help_text=(
+                "Annualised volatility of portfolio returns relative "
+                "to the benchmark."
+            ),
+            status=_classify_risk_value(tracking_error_percent),
+        ),
+        AdvancedKPI(
+            label="Capture Spread",
+            value=_format_percentage(capture_spread),
+            delta=(
+                "Upside capture minus downside capture"
+                if capture_spread is not None
+                else "Benchmark data unavailable"
+            ),
+            help_text=(
+                "Difference between upside and downside capture ratios. "
+                "Positive values indicate favourable asymmetric capture."
+            ),
+            status=_classify_signed_value(capture_spread),
+        ),
+    )
+
+
 # ============================================================
 # Rendering Helpers
 # ============================================================
@@ -576,6 +686,8 @@ def _render_kpi(
 
 def render_advanced_kpis(
     service_result: AdvancedAnalyticsServiceResult,
+    *,
+    source_label: str | None = None,
 ) -> None:
     """
     Render the advanced analytics KPI section.
@@ -586,6 +698,8 @@ def render_advanced_kpis(
     Args:
         service_result:
             Result returned by AdvancedAnalyticsService.
+        source_label:
+            Optional disclosure for the history used by the metrics.
     """
 
     if not isinstance(
@@ -599,10 +713,18 @@ def render_advanced_kpis(
 
     st.subheader("Advanced Performance & Risk Metrics")
 
-    st.caption(
+    caption = (
         "Review annualised performance, portfolio risk, drawdowns, "
         "risk-adjusted returns, and benchmark-relative performance."
     )
+
+    if source_label:
+        caption += (
+            f" Source: {source_label}. "
+            "This is not actual transaction-based portfolio history."
+        )
+
+    st.caption(caption)
 
     kpis = build_advanced_kpis(
         service_result
@@ -648,6 +770,53 @@ def render_advanced_kpis(
         )
 
 
+def render_institutional_kpis(
+    service_result: AdvancedAnalyticsServiceResult,
+    *,
+    source_label: str | None = None,
+) -> None:
+    """Render benchmark-aware institutional KPI cards."""
+
+    if not isinstance(
+        service_result,
+        AdvancedAnalyticsServiceResult,
+    ):
+        raise TypeError(
+            "service_result must be an instance of "
+            "AdvancedAnalyticsServiceResult."
+        )
+
+    st.subheader(
+        "Institutional Portfolio Analytics"
+    )
+
+    caption = (
+        "Evaluate systematic risk, risk-adjusted alpha, benchmark "
+        "tracking, and asymmetric market capture."
+    )
+
+    if source_label:
+        caption += (
+            f" Source: {source_label}. "
+            "This is not actual transaction-based portfolio history."
+        )
+
+    st.caption(caption)
+    kpis = build_institutional_kpis(
+        service_result
+    )
+
+    columns = st.columns(4)
+
+    for column, kpi in zip(
+        columns,
+        kpis,
+        strict=True,
+    ):
+        with column:
+            _render_kpi(kpi)
+
+
 # ============================================================
 # Compatibility Alias
 # ============================================================
@@ -674,6 +843,8 @@ __all__ = [
     "AdvancedKPI",
     "KPIStatus",
     "build_advanced_kpis",
+    "build_institutional_kpis",
     "render_advanced_kpis",
+    "render_institutional_kpis",
     "show_advanced_kpis",
 ]

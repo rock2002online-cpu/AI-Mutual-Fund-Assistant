@@ -1,0 +1,3 @@
+# Database
+database/*
+!database/.gitkeep

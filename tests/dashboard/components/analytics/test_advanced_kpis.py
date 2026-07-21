@@ -25,6 +25,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import dashboard.components.analytics.advanced_kpis as advanced_kpis
 from dashboard.components.analytics.advanced_kpis import (
     AdvancedKPI,
     build_advanced_kpis,
@@ -340,6 +341,36 @@ def unavailable_service_result() -> AdvancedAnalyticsServiceResult:
 # ============================================================
 # AdvancedKPI Dataclass Tests
 # ============================================================
+
+
+def test_build_institutional_kpis(
+    complete_service_result: AdvancedAnalyticsServiceResult,
+) -> None:
+    """Build benchmark-aware institutional portfolio KPI cards."""
+
+    result = advanced_kpis.build_institutional_kpis(
+        complete_service_result
+    )
+
+    assert tuple(
+        kpi.label
+        for kpi in result
+    ) == (
+        "Portfolio Beta",
+        "Jensen's Alpha",
+        "Tracking Error",
+        "Capture Spread",
+    )
+
+    assert tuple(
+        kpi.value
+        for kpi in result
+    ) == (
+        "0.95",
+        "1.80%",
+        "3.00%",
+        "15.00%",
+    )
 
 
 def test_advanced_kpi_creation() -> None:
@@ -1036,6 +1067,43 @@ def test_build_kpis_rejects_wrong_result_type() -> None:
 @patch(
     "dashboard.components.analytics.advanced_kpis.st"
 )
+def test_render_institutional_kpis(
+    mock_st: MagicMock,
+    complete_service_result: AdvancedAnalyticsServiceResult,
+) -> None:
+    """Render four institutional KPI cards in one row."""
+
+    mock_st.columns.return_value = tuple(
+        MagicMock()
+        for _ in range(4)
+    )
+
+    advanced_kpis.render_institutional_kpis(
+        complete_service_result
+    )
+
+    mock_st.subheader.assert_called_once_with(
+        "Institutional Portfolio Analytics"
+    )
+
+    mock_st.columns.assert_called_once_with(4)
+
+    assert mock_st.metric.call_count == 4
+
+    assert tuple(
+        call.kwargs["label"]
+        for call in mock_st.metric.call_args_list
+    ) == (
+        "Portfolio Beta",
+        "Jensen's Alpha",
+        "Tracking Error",
+        "Capture Spread",
+    )
+
+
+@patch(
+    "dashboard.components.analytics.advanced_kpis.st"
+)
 def test_render_advanced_kpis_complete(
     mock_st: MagicMock,
     complete_service_result: AdvancedAnalyticsServiceResult,
@@ -1622,3 +1690,82 @@ def test_kpi_order_is_stable(
     )
 
     assert first_result == second_result
+
+def test_render_advanced_kpis_accepts_source_label() -> None:
+    import inspect
+
+    from dashboard.components.analytics import advanced_kpis
+
+    parameters = inspect.signature(
+        advanced_kpis.render_advanced_kpis
+    ).parameters
+
+    assert "source_label" in parameters
+
+def test_render_institutional_kpis_accepts_source_label() -> None:
+    import inspect
+
+    from dashboard.components.analytics import advanced_kpis
+
+    parameters = inspect.signature(
+        advanced_kpis.render_institutional_kpis
+    ).parameters
+
+    assert "source_label" in parameters
+
+def test_render_institutional_kpis_displays_source_label(
+    monkeypatch,
+) -> None:
+    from unittest.mock import MagicMock, Mock
+
+    from dashboard.components.analytics import advanced_kpis
+
+    service_result = object.__new__(
+        advanced_kpis.AdvancedAnalyticsServiceResult
+    )
+
+    caption = Mock()
+    columns = [
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    ]
+
+    monkeypatch.setattr(
+        advanced_kpis,
+        "build_institutional_kpis",
+        Mock(return_value=(Mock(), Mock(), Mock(), Mock())),
+    )
+    monkeypatch.setattr(
+        advanced_kpis,
+        "_render_kpi",
+        Mock(),
+    )
+    monkeypatch.setattr(
+        advanced_kpis.st,
+        "subheader",
+        Mock(),
+    )
+    monkeypatch.setattr(
+        advanced_kpis.st,
+        "caption",
+        caption,
+    )
+    monkeypatch.setattr(
+        advanced_kpis.st,
+        "columns",
+        Mock(return_value=columns),
+    )
+
+    advanced_kpis.render_institutional_kpis(
+        service_result,
+        source_label="Current-holdings historical backtest",
+    )
+
+    caption.assert_called_once_with(
+        "Evaluate systematic risk, risk-adjusted alpha, benchmark "
+        "tracking, and asymmetric market capture. "
+        "Source: Current-holdings historical backtest. "
+        "This is not actual transaction-based portfolio history."
+    )

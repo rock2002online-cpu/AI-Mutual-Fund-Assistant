@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import requests
@@ -11,6 +11,11 @@ class NAVService:
     """
 
     AMFI_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
+    AMFI_HISTORY_URL = (
+        "https://portal.amfiindia.com/"
+        "DownloadNAVHistoryReport_Po.aspx"
+    )
+    AMFI_MAX_ATTEMPTS = 3
 
     def __init__(self):
 
@@ -85,3 +90,176 @@ class NAVService:
         )
 
         return df
+
+    def download_historical_nav(
+        self,
+        *,
+        scheme_codes: tuple[str, ...],
+        from_date: date,
+        to_date: date,
+    ) -> pd.DataFrame:
+        """Download and parse one AMFI historical NAV date range."""
+
+        normalized_scheme_codes = {
+            str(scheme_code).strip()
+            for scheme_code in scheme_codes
+            if str(scheme_code).strip()
+        }
+
+        request_params = {
+            "frmdt": from_date.strftime(
+                "%d-%b-%Y"
+            ),
+            "todt": to_date.strftime(
+                "%d-%b-%Y"
+            ),
+        }
+
+        for attempt in range(
+            1,
+            self.AMFI_MAX_ATTEMPTS + 1,
+        ):
+            try:
+                response = requests.get(
+                    self.AMFI_HISTORY_URL,
+                    params=request_params,
+                    timeout=30,
+                )
+                break
+
+            except requests.RequestException:
+                if attempt == self.AMFI_MAX_ATTEMPTS:
+                    raise
+
+        response.raise_for_status()
+
+        rows: list[dict[str, object]] = []
+
+        for line in response.text.splitlines():
+            parts = [
+                part.strip()
+                for part in line.split(";")
+            ]
+
+            if len(parts) != 8:
+                continue
+
+            scheme_code = parts[0]
+
+            if scheme_code not in normalized_scheme_codes:
+                continue
+
+            rows.append(
+                {
+                    "Scheme Code": scheme_code,
+                    "Fund": parts[1],
+                    "NAV": parts[4],
+                    "Date": parts[7],
+                }
+            )
+
+        result = pd.DataFrame(
+            rows,
+            columns=[
+                "Scheme Code",
+                "Fund",
+                "NAV",
+                "Date",
+            ],
+        )
+
+        result["NAV"] = pd.to_numeric(
+            result["NAV"],
+            errors="coerce",
+        )
+
+        result["Date"] = pd.to_datetime(
+            result["Date"],
+            format="%d-%b-%Y",
+            errors="coerce",
+        )
+
+        result = result.dropna(
+            subset=[
+                "NAV",
+                "Date",
+            ]
+        )
+
+        return result.reset_index(
+            drop=True,
+        )
+
+    def get_historical_nav(
+        self,
+        *,
+        scheme_codes: tuple[str, ...],
+        from_date: date,
+        to_date: date,
+    ) -> pd.DataFrame:
+        """Download a historical NAV range in AMFI-supported chunks."""
+
+        if from_date > to_date:
+            raise ValueError(
+                "from_date must be on or before to_date"
+            )
+
+        chunks: list[pd.DataFrame] = []
+        chunk_start = from_date
+
+        while chunk_start <= to_date:
+            chunk_end = min(
+                chunk_start
+                + timedelta(days=89),
+                to_date,
+            )
+
+            chunks.append(
+                self.download_historical_nav(
+                    scheme_codes=scheme_codes,
+                    from_date=chunk_start,
+                    to_date=chunk_end,
+                )
+            )
+
+            chunk_start = (
+                chunk_end
+                + timedelta(days=1)
+            )
+
+        if not chunks:
+            return pd.DataFrame(
+                columns=[
+                    "Scheme Code",
+                    "Fund",
+                    "NAV",
+                    "Date",
+                ]
+            )
+
+        result = pd.concat(
+            chunks,
+            ignore_index=True,
+        )
+
+        if result.empty:
+            return result
+
+        result = result.drop_duplicates(
+            subset=[
+                "Scheme Code",
+                "Date",
+            ],
+            keep="last",
+        )
+
+        result = result.sort_values(
+            by=[
+                "Date",
+                "Scheme Code",
+            ]
+        )
+
+        return result.reset_index(
+            drop=True,
+        )

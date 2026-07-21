@@ -25,3 +25,11 @@ reports/*.xlsx
 
 # Streamlit cache
 .streamlit/
+
+# Local SQLite databases
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+database/*
+!database/.gitkeep

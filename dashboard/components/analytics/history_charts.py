@@ -442,7 +442,7 @@ def render_portfolio_growth_chart(
     try:
         st.plotly_chart(
             figure,
-            use_container_width=True,
+            width="stretch",
             key=PORTFOLIO_GROWTH_CHART_KEY,
         )
 

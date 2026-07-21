@@ -173,7 +173,7 @@ def render_investment_vs_current(
 
     st.plotly_chart(
         figure,
-        use_container_width=True,
+        width="stretch",
         config={
             "displayModeBar": False,
             "responsive": True,
