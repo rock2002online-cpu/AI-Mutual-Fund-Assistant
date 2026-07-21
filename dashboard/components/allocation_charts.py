@@ -130,7 +130,7 @@ def _show_allocation_donut(chart_df: pd.DataFrame) -> None:
 
     st.plotly_chart(
         figure,
-        use_container_width=True,
+        width="stretch",
         config={
             "displayModeBar": False,
             "responsive": True,
@@ -203,7 +203,7 @@ def _show_value_comparison_chart(chart_df: pd.DataFrame) -> None:
 
     st.plotly_chart(
         figure,
-        use_container_width=True,
+        width="stretch",
         config={
             "displayModeBar": False,
             "responsive": True,
@@ -239,7 +239,7 @@ def _show_allocation_table(chart_df: pd.DataFrame) -> None:
                 "Allocation %": "{:.2f}%",
             }
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 

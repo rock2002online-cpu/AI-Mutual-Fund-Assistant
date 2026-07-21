@@ -27,9 +27,11 @@ from unittest.mock import MagicMock, patch
 import plotly.graph_objects as go
 import pytest
 
+import dashboard.components.analytics.risk_charts as risk_charts
 from dashboard.components.analytics.risk_charts import (
     ACTIVE_RETURNS_CHART_KEY,
     BENCHMARK_COMPARISON_CHART_KEY,
+    CAPTURE_RATIO_CHART_KEY,
     DRAW_DOWN_CHART_KEY,
     RETURN_FREQUENCY_CHART_KEY,
     ROLLING_RETURNS_CHART_KEY,
@@ -874,6 +876,47 @@ def test_benchmark_comparison_layout(
     assert figure.layout.showlegend is False
 
 
+# ============================================================
+# Capture Ratio Chart Tests
+# ============================================================
+
+
+def test_build_capture_ratio_chart(
+    complete_service_result: AdvancedAnalyticsServiceResult,
+) -> None:
+    """Capture chart should compare upside and downside capture."""
+
+    figure = risk_charts.build_capture_ratio_chart(
+        complete_service_result
+    )
+
+    assert isinstance(
+        figure,
+        go.Figure,
+    )
+
+    assert len(figure.data) == 1
+
+    trace = figure.data[0]
+
+    assert isinstance(
+        trace,
+        go.Bar,
+    )
+
+    assert tuple(trace.x) == (
+        "Upside Capture",
+        "Downside Capture",
+    )
+
+    assert tuple(trace.y) == pytest.approx(
+        (
+            105.0,
+            90.0,
+        )
+    )
+
+
 def test_benchmark_chart_uses_generic_name_when_missing(
     benchmark_result: BenchmarkResult,
 ) -> None:
@@ -1464,6 +1507,7 @@ def test_chart_keys_are_unique() -> None:
         ROLLING_RETURNS_CHART_KEY,
         BENCHMARK_COMPARISON_CHART_KEY,
         ACTIVE_RETURNS_CHART_KEY,
+        CAPTURE_RATIO_CHART_KEY,
         RETURN_FREQUENCY_CHART_KEY,
     )
 
@@ -1480,6 +1524,7 @@ def test_chart_keys_are_non_empty_strings() -> None:
         ROLLING_RETURNS_CHART_KEY,
         BENCHMARK_COMPARISON_CHART_KEY,
         ACTIVE_RETURNS_CHART_KEY,
+        CAPTURE_RATIO_CHART_KEY,
         RETURN_FREQUENCY_CHART_KEY,
     )
 
@@ -1497,12 +1542,54 @@ def test_chart_keys_are_non_empty_strings() -> None:
 @patch(
     "dashboard.components.analytics.risk_charts.st"
 )
+def test_render_risk_charts_includes_capture_ratio_chart(
+    mock_st: MagicMock,
+    complete_service_result: AdvancedAnalyticsServiceResult,
+) -> None:
+    """Renderer should display the Capture Ratio chart."""
+
+    mock_st.columns.side_effect = (
+        (
+            MagicMock(),
+            MagicMock(),
+        ),
+        (
+            MagicMock(),
+            MagicMock(),
+        ),
+    )
+
+    render_risk_charts(
+        complete_service_result
+    )
+
+    rendered_titles = tuple(
+        call.args[0].layout.title.text
+        for call in mock_st.plotly_chart.call_args_list
+    )
+
+    rendered_keys = tuple(
+        call.kwargs["key"]
+        for call in mock_st.plotly_chart.call_args_list
+    )
+
+    assert "Capture Ratios" in rendered_titles
+
+    assert (
+        "advanced_analytics_capture_ratio_chart"
+        in rendered_keys
+    )
+
+
+@patch(
+    "dashboard.components.analytics.risk_charts.st"
+)
 def test_render_risk_charts_complete(
     mock_st: MagicMock,
     complete_service_result: AdvancedAnalyticsServiceResult,
 ) -> None:
     """
-    Complete results should render five Plotly charts.
+    Complete results should render six Plotly charts.
     """
 
     first_row = (
@@ -1531,7 +1618,7 @@ def test_render_risk_charts_complete(
     mock_st.caption.assert_called_once()
 
     assert mock_st.columns.call_count == 2
-    assert mock_st.plotly_chart.call_count == 5
+    assert mock_st.plotly_chart.call_count == 6
 
     mock_st.warning.assert_not_called()
     mock_st.error.assert_not_called()
@@ -1574,6 +1661,7 @@ def test_render_risk_charts_uses_unique_keys(
         ROLLING_RETURNS_CHART_KEY,
         BENCHMARK_COMPARISON_CHART_KEY,
         ACTIVE_RETURNS_CHART_KEY,
+        CAPTURE_RATIO_CHART_KEY,
         RETURN_FREQUENCY_CHART_KEY,
     )
 
@@ -1607,13 +1695,13 @@ def test_render_risk_charts_configuration(
     )
 
     for chart_call in mock_st.plotly_chart.call_args_list:
-        assert chart_call.kwargs["use_container_width"] is True
+        assert chart_call.kwargs["width"] == "stretch"
+        assert "use_container_width" not in chart_call.kwargs
 
         assert chart_call.kwargs["config"] == {
             "displayModeBar": False,
             "responsive": True,
         }
-
 
 @patch(
     "dashboard.components.analytics.risk_charts.st"
@@ -1838,3 +1926,14 @@ def test_chart_builders_return_new_figures(
     assert isinstance(first, go.Figure)
     assert isinstance(second, go.Figure)
     assert first is not second
+
+def test_render_risk_charts_accepts_source_label() -> None:
+    import inspect
+
+    from dashboard.components.analytics import risk_charts
+
+    parameters = inspect.signature(
+        risk_charts.render_risk_charts
+    ).parameters
+
+    assert "source_label" in parameters

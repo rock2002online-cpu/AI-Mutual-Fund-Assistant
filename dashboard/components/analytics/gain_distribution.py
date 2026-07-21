@@ -106,7 +106,7 @@ def render_gain_distribution(df: pd.DataFrame) -> None:
 
     st.plotly_chart(
     fig,
-    use_container_width=True,
+    width="stretch",
     config={
         "displayModeBar": False,
     },

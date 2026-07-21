@@ -865,3 +865,114 @@ def test_sell_units_propagates_repository_error_and_rolls_back() -> None:
     assert unit_of_work.commit_called is False
     assert unit_of_work.rollback_called is True
     assert unit_of_work.exit_called is True
+
+def test_get_cash_flow_history_converts_buy_and_sell_signs() -> None:
+    """BUY is an outflow and SELL is an inflow for investor XIRR."""
+
+    repository = FakeTransactionRepository()
+
+    repository.items.extend(
+        [
+            make_transaction(
+                portfolio_id=1,
+                fund_id=2,
+                transaction_type="SELL",
+                units=2.0,
+                amount=60.0,
+                transaction_date=date(2026, 3, 15),
+            ),
+            make_transaction(
+                portfolio_id=1,
+                fund_id=2,
+                transaction_type="BUY",
+                units=10.0,
+                amount=250.0,
+                transaction_date=date(2026, 1, 10),
+            ),
+            make_transaction(
+                portfolio_id=2,
+                fund_id=3,
+                transaction_type="BUY",
+                units=5.0,
+                amount=100.0,
+                transaction_date=date(2026, 2, 1),
+            ),
+        ]
+    )
+
+    unit_of_work = FakeUnitOfWork(
+        transactions=repository,
+    )
+
+    service = TransactionService(
+        unit_of_work_factory=lambda: unit_of_work,
+    )
+
+    history = service.get_cash_flow_history(
+        portfolio_id=1,
+    )
+
+    assert history.to_dict("records") == [
+        {
+            "Date": date(2026, 1, 10),
+            "Amount": -250.0,
+        },
+        {
+            "Date": date(2026, 3, 15),
+            "Amount": 60.0,
+        },
+    ]
+
+def test_get_cash_flow_history_excludes_opening_balances() -> None:
+    """Imported holdings lack genuine purchase dates and cannot drive XIRR."""
+
+    repository = FakeTransactionRepository()
+
+    repository.items.extend(
+        [
+            make_transaction(
+                portfolio_id=1,
+                fund_id=2,
+                transaction_type="OPENING_BALANCE",
+                units=10.0,
+                amount=250.0,
+                transaction_date=date(2026, 7, 17),
+            ),
+            make_transaction(
+                portfolio_id=1,
+                fund_id=2,
+                transaction_type="BUY",
+                units=2.0,
+                amount=60.0,
+                transaction_date=date(2026, 7, 18),
+            ),
+        ]
+    )
+
+    unit_of_work = FakeUnitOfWork(
+        transactions=repository,
+    )
+
+    service = TransactionService(
+        unit_of_work_factory=lambda: unit_of_work,
+    )
+
+    history = service.get_cash_flow_history(
+        portfolio_id=1,
+    )
+
+    assert history.to_dict("records") == [
+        {
+            "Date": date(2026, 7, 18),
+            "Amount": -60.0,
+        },
+    ]
+
+def test_transaction_service_uses_default_unit_of_work() -> None:
+    """The application service should use the production UoW by default."""
+
+    from repositories.unit_of_work import UnitOfWork
+
+    service = TransactionService()
+
+    assert service._unit_of_work_factory is UnitOfWork

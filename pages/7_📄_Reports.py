@@ -662,7 +662,7 @@ def _render_summary_table(
     st.dataframe(
         dataframe,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -695,7 +695,7 @@ def _render_download_section(
                 bundle.pdf.filename
             ),
             mime=bundle.pdf.mime_type,
-            use_container_width=True,
+            width="stretch",
             key="download_portfolio_pdf",
         )
 
@@ -711,7 +711,7 @@ def _render_download_section(
                 bundle.excel.filename
             ),
             mime=bundle.excel.mime_type,
-            use_container_width=True,
+            width="stretch",
             key="download_portfolio_excel",
         )
 
@@ -777,7 +777,7 @@ def _render_portfolio_section(
         st.dataframe(
             data.portfolio,
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
 

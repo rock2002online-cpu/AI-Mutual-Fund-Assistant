@@ -816,10 +816,8 @@ def test_render_portfolio_growth_chart_renders_valid_figure(
         go.Figure,
     )
 
-    assert (
-        call.kwargs["use_container_width"]
-        is True
-    )
+    assert call.kwargs["width"] == "stretch"
+    assert "use_container_width" not in call.kwargs
 
     assert (
         call.kwargs["key"]

@@ -22,6 +22,7 @@ Phase 2:
 Phase 3:
 - Portfolio valuation-history retrieval
 - Historical portfolio-value growth chart
+- Nifty 50 TRI benchmark-return integration
 
 PortfolioService remains the single source of current portfolio data.
 PortfolioHistoryService remains the single source of historical valuation data.
@@ -34,6 +35,7 @@ import streamlit as st
 
 from dashboard.components.analytics.advanced_kpis import (
     render_advanced_kpis,
+    render_institutional_kpis,
 )
 from dashboard.components.analytics.allocation_donut import (
     render_allocation_donut,
@@ -50,11 +52,19 @@ from dashboard.components.analytics.history_statistics import (
 from dashboard.components.analytics.investment_vs_current import (
     render_investment_vs_current,
 )
+from dashboard.components.analytics.institutional_risk_kpis import (
+    calculate_institutional_risk_metrics,
+    render_institutional_risk_kpis,
+)
 from dashboard.components.analytics.performance_kpis import (
     render_performance_kpis,
 )
 from dashboard.components.analytics.risk_charts import (
     render_risk_charts,
+)
+from dashboard.components.analytics.rolling_risk_chart import (
+    calculate_rolling_risk_metrics,
+    render_rolling_risk_chart,
 )
 from services.advanced_analytics_service import (
     AdvancedAnalyticsService,
@@ -75,6 +85,15 @@ from services.history.portfolio_history_service import (
     PortfolioHistoryService,
 )
 from services.portfolio_service import PortfolioService
+from services.portfolio_backtest_service import (
+    PortfolioBacktestService,
+)
+from services.benchmark_history_service import (
+    BenchmarkHistoryService,
+)
+from services.transaction_service import (
+    TransactionService,
+)
 
 
 # ============================================================
@@ -451,7 +470,39 @@ def _calculate_advanced_analytics(
             portfolio_service=portfolio_provider
         )
 
-        service_input = AdvancedAnalyticsServiceInput()
+        backtest_service = PortfolioBacktestService()
+        backtest_history = backtest_service.load_default_backtest()
+
+        benchmark_service = BenchmarkHistoryService()
+        aligned_benchmark_returns = (
+            benchmark_service.align_default_history(
+                portfolio_history=backtest_history,
+            )
+        )
+
+        transaction_service = TransactionService()
+        cash_flow_history = (
+            transaction_service.get_cash_flow_history(
+                portfolio_id=1,
+            )
+        )
+
+        if cash_flow_history.empty:
+            cash_flow_history = None
+
+        benchmark_name = "Nifty 50 TRI"
+
+        if aligned_benchmark_returns.empty:
+            aligned_benchmark_returns = None
+            benchmark_name = None
+
+        service_input = AdvancedAnalyticsServiceInput(
+            portfolio_history=backtest_history,
+            cash_flow_history=cash_flow_history,
+            aligned_benchmark_returns=aligned_benchmark_returns,
+            benchmark_name=benchmark_name,
+            periods_per_year=12,
+        )
 
         return advanced_service.calculate(
             service_input
@@ -491,6 +542,8 @@ def _calculate_advanced_analytics(
 
 def _render_advanced_kpi_section(
     service_result: AdvancedAnalyticsServiceResult,
+    *,
+    source_label: str | None = None,
 ) -> None:
     """
     Render advanced performance and risk KPI cards.
@@ -501,12 +554,68 @@ def _render_advanced_kpi_section(
     Args:
         service_result:
             Result returned by AdvancedAnalyticsService.
+        source_label:
+            Optional disclosure for the history used to calculate risk.
     """
 
     try:
-        render_advanced_kpis(
-            service_result
+        if source_label is None:
+            render_advanced_kpis(
+                service_result
+            )
+        else:
+            render_advanced_kpis(
+                service_result,
+                source_label=source_label,
+            )
+
+        if source_label is None:
+            render_institutional_kpis(
+                service_result
+            )
+        else:
+            render_institutional_kpis(
+                service_result,
+                source_label=source_label,
+            )
+
+        institutional_risk_metrics = (
+            calculate_institutional_risk_metrics(
+                service_result
+            )
         )
+
+        institutional_risk_source_label = source_label
+
+        if institutional_risk_metrics is None:
+            backtest_service = PortfolioBacktestService()
+
+            backtest_history = (
+                backtest_service.load_default_backtest()
+            )
+
+            institutional_risk_metrics = (
+                backtest_service.calculate_risk_metrics(
+                    backtest_history
+                )
+            )
+
+            institutional_risk_source_label = (
+                "Current-holdings historical backtest"
+            )
+
+        if institutional_risk_metrics is not None:
+            if institutional_risk_source_label is None:
+                render_institutional_risk_kpis(
+                    institutional_risk_metrics
+                )
+            else:
+                render_institutional_risk_kpis(
+                    institutional_risk_metrics,
+                    source_label=(
+                        institutional_risk_source_label
+                    ),
+                )
 
     except Exception as error:
         st.error(
@@ -526,6 +635,8 @@ def _render_advanced_kpi_section(
 
 def _render_risk_chart_section(
     service_result: AdvancedAnalyticsServiceResult,
+    *,
+    source_label: str | None = None,
 ) -> None:
     """
     Render advanced risk and benchmark charts.
@@ -536,12 +647,59 @@ def _render_risk_chart_section(
     Args:
         service_result:
             Result returned by AdvancedAnalyticsService.
+        source_label:
+            Optional disclosure for the history used in rolling metrics.
     """
 
     try:
-        render_risk_charts(
-            service_result
+        if source_label is None:
+            render_risk_charts(
+                service_result
+            )
+        else:
+            render_risk_charts(
+                service_result,
+                source_label=source_label,
+            )
+
+        rolling_risk_metrics = (
+            calculate_rolling_risk_metrics(
+                service_result
+            )
         )
+
+        rolling_risk_source_label = source_label
+
+        if not rolling_risk_metrics:
+            backtest_service = PortfolioBacktestService()
+
+            backtest_history = (
+                backtest_service.load_default_backtest()
+            )
+
+            rolling_risk_metrics = (
+                backtest_service
+                .calculate_rolling_risk_metrics(
+                    backtest_history
+                )
+            )
+
+            rolling_risk_source_label = (
+                "Current-holdings historical backtest"
+            )
+
+        if rolling_risk_metrics:
+            if rolling_risk_source_label is None:
+                render_rolling_risk_chart(
+                    rolling_risk_metrics
+                )
+            else:
+                render_rolling_risk_chart(
+                    rolling_risk_metrics,
+                    source_label=(
+                        rolling_risk_source_label
+                    ),
+                )
 
     except Exception as error:
         st.error(
@@ -582,14 +740,20 @@ def _render_advanced_analytics_section(
     if service_result is None:
         return
 
+    source_label = (
+        "Current-holdings historical backtest"
+    )
+
     _render_advanced_kpi_section(
-        service_result
+        service_result,
+        source_label=source_label,
     )
 
     st.divider()
 
     _render_risk_chart_section(
-        service_result
+        service_result,
+        source_label=source_label,
     )
 
 

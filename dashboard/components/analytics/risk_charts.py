@@ -53,6 +53,9 @@ ACTIVE_RETURNS_CHART_KEY = (
 RETURN_FREQUENCY_CHART_KEY = (
     "advanced_analytics_return_frequency_chart"
 )
+CAPTURE_RATIO_CHART_KEY = (
+    "advanced_analytics_capture_ratio_chart"
+)
 
 
 # ============================================================
@@ -540,6 +543,77 @@ def build_benchmark_comparison_chart(
 
 
 # ============================================================
+# Capture Ratio Chart
+# ============================================================
+
+
+def build_capture_ratio_chart(
+    service_result: AdvancedAnalyticsServiceResult,
+) -> go.Figure:
+    """Build upside-versus-downside benchmark capture comparison."""
+
+    if not isinstance(
+        service_result,
+        AdvancedAnalyticsServiceResult,
+    ):
+        raise TypeError(
+            "service_result must be an instance of "
+            "AdvancedAnalyticsServiceResult."
+        )
+
+    analytics = service_result.analytics
+
+    if (
+        analytics is None
+        or analytics.benchmark is None
+    ):
+        return _empty_figure(
+            title="Capture Ratios",
+            message=(
+                "Aligned portfolio and benchmark return history is "
+                "required for capture-ratio analysis."
+            ),
+        )
+
+    benchmark = analytics.benchmark
+
+    figure = go.Figure()
+
+    figure.add_trace(
+        go.Bar(
+            x=(
+                "Upside Capture",
+                "Downside Capture",
+            ),
+            y=(
+                benchmark.upside_capture_ratio,
+                benchmark.downside_capture_ratio,
+            ),
+            name="Capture Ratio",
+            hovertemplate=(
+                "%{x}<br>"
+                "%{y:.2f}%"
+                "<extra></extra>"
+            ),
+        )
+    )
+
+    figure.add_hline(
+        y=100.0,
+        line_dash="dash",
+        annotation_text="Benchmark Capture",
+        annotation_position="top left",
+    )
+
+    return _base_layout(
+        figure,
+        title="Capture Ratios",
+        yaxis_title="Capture Ratio (%)",
+        showlegend=False,
+    )
+
+
+# ============================================================
 # Active Return Distribution Chart
 # ============================================================
 
@@ -810,7 +884,7 @@ def _render_chart(
 
     st.plotly_chart(
         figure,
-        use_container_width=True,
+        width="stretch",
         key=key,
         config={
             "displayModeBar": False,
@@ -826,6 +900,8 @@ def _render_chart(
 
 def render_risk_charts(
     service_result: AdvancedAnalyticsServiceResult,
+    *,
+    source_label: str | None = None,
 ) -> None:
     """
     Render the complete advanced risk-chart section.
@@ -845,10 +921,18 @@ def render_risk_charts(
 
     st.subheader("Advanced Risk & Benchmark Analysis")
 
-    st.caption(
+    caption = (
         "Explore drawdowns, rolling performance, benchmark-relative "
         "returns, active performance, and return consistency."
     )
+
+    if source_label:
+        caption += (
+            f" Source: {source_label}. "
+            "This is not actual transaction-based portfolio history."
+        )
+
+    st.caption(caption)
 
     first_row = st.columns(2)
 
@@ -883,6 +967,13 @@ def render_risk_charts(
             ),
             key=ACTIVE_RETURNS_CHART_KEY,
         )
+
+    _render_chart(
+        build_capture_ratio_chart(
+            service_result
+        ),
+        key=CAPTURE_RATIO_CHART_KEY,
+    )
 
     _render_chart(
         build_return_frequency_chart(
@@ -935,6 +1026,7 @@ def show_risk_charts(
 __all__ = [
     "ACTIVE_RETURNS_CHART_KEY",
     "BENCHMARK_COMPARISON_CHART_KEY",
+    "CAPTURE_RATIO_CHART_KEY",
     "ChartAvailability",
     "ChartMessage",
     "DRAW_DOWN_CHART_KEY",
@@ -942,6 +1034,7 @@ __all__ = [
     "ROLLING_RETURNS_CHART_KEY",
     "build_active_return_chart",
     "build_benchmark_comparison_chart",
+    "build_capture_ratio_chart",
     "build_drawdown_chart",
     "build_return_frequency_chart",
     "build_rolling_returns_chart",
