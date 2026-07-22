@@ -36,6 +36,99 @@ class TransactionService:
             )
         )
 
+    @staticmethod
+    def calculate_cash_flow_summary(
+        transaction_history: pd.DataFrame,
+    ) -> dict[str, int | float]:
+        """
+        Summarize XIRR-eligible BUY and SELL cash flows.
+
+        OPENING_BALANCE and every other ineligible transaction are excluded.
+        BUY outflow and SELL inflow are reported as positive magnitudes, while
+        net cash flow preserves the signed external-cash-flow convention.
+        """
+
+        eligible_mask = (
+            transaction_history[
+                "XIRR Eligible"
+            ]
+            .fillna(False)
+            .astype(bool)
+        )
+
+        eligible_history = (
+            transaction_history.loc[
+                eligible_mask
+            ]
+            .copy()
+        )
+
+        transaction_types = (
+            eligible_history[
+                "Transaction Type"
+            ]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        buy_mask = (
+            transaction_types == "BUY"
+        )
+        sell_mask = (
+            transaction_types == "SELL"
+        )
+
+        buy_count = int(
+            buy_mask.sum()
+        )
+        sell_count = int(
+            sell_mask.sum()
+        )
+
+        buy_outflow = float(
+            pd.to_numeric(
+                eligible_history.loc[
+                    buy_mask,
+                    "Amount",
+                ],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        )
+
+        sell_inflow = float(
+            pd.to_numeric(
+                eligible_history.loc[
+                    sell_mask,
+                    "Amount",
+                ],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        )
+
+        net_cash_flow = float(
+            pd.to_numeric(
+                eligible_history[
+                    "Cash Flow"
+                ],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .sum()
+        )
+
+        return {
+            "buy_count": buy_count,
+            "sell_count": sell_count,
+            "buy_outflow": buy_outflow,
+            "sell_inflow": sell_inflow,
+            "net_cash_flow": net_cash_flow,
+        }
+
     def get_transaction_history(
         self,
         *,
