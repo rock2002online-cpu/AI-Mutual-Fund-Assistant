@@ -33,6 +33,92 @@ def _build_transaction_preview(
     )
 
 
+def _filter_transaction_history(
+    transaction_history: pd.DataFrame,
+    *,
+    transaction_types: tuple[str, ...],
+    funds: tuple[str, ...],
+    xirr_eligibility: str,
+) -> pd.DataFrame:
+    """Return a filtered copy of the transaction ledger."""
+
+    filtered_history = (
+        transaction_history.copy()
+    )
+
+    if transaction_types:
+        normalized_types = {
+            str(transaction_type)
+            .strip()
+            .upper()
+            for transaction_type in transaction_types
+        }
+
+        filtered_history = filtered_history[
+            filtered_history[
+                "Transaction Type"
+            ]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .isin(normalized_types)
+        ]
+
+    if funds:
+        normalized_funds = {
+            str(fund).strip()
+            for fund in funds
+        }
+
+        filtered_history = filtered_history[
+            filtered_history[
+                "Fund"
+            ]
+            .astype(str)
+            .str.strip()
+            .isin(normalized_funds)
+        ]
+
+    normalized_eligibility = (
+        str(xirr_eligibility)
+        .strip()
+        .lower()
+    )
+
+    if normalized_eligibility == "eligible":
+        filtered_history = filtered_history[
+            filtered_history[
+                "XIRR Eligible"
+            ]
+            .fillna(False)
+            .astype(bool)
+        ]
+    elif normalized_eligibility == "excluded":
+        filtered_history = filtered_history[
+            ~filtered_history[
+                "XIRR Eligible"
+            ]
+            .fillna(False)
+            .astype(bool)
+        ]
+
+    return filtered_history.reset_index(
+        drop=True
+    )
+
+
+def _build_transaction_history_csv(
+    filtered_history: pd.DataFrame,
+) -> bytes:
+    """Return the currently filtered transaction ledger as UTF-8 CSV."""
+
+    return filtered_history.to_csv(
+        index=False,
+    ).encode(
+        "utf-8"
+    )
+
+
 def _import_uploaded_transactions(
     uploaded_file,
     *,
@@ -233,10 +319,79 @@ def _render_transaction_history() -> None:
             "BUY or SELL transactions exist."
         )
 
+    transaction_type_options = sorted(
+        transaction_history[
+            "Transaction Type"
+        ]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    fund_options = sorted(
+        transaction_history[
+            "Fund"
+        ]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    selected_transaction_types = tuple(
+        st.multiselect(
+            "Transaction Type",
+            options=transaction_type_options,
+            key="transaction_type_filter",
+        )
+    )
+
+    selected_funds = tuple(
+        st.multiselect(
+            "Fund",
+            options=fund_options,
+            key="transaction_fund_filter",
+        )
+    )
+
+    selected_eligibility = st.selectbox(
+        "XIRR Eligibility",
+        options=[
+            "All",
+            "Eligible",
+            "Excluded",
+        ],
+        key="transaction_xirr_filter",
+    )
+
+    filtered_history = (
+        _filter_transaction_history(
+            transaction_history,
+            transaction_types=(
+                selected_transaction_types
+            ),
+            funds=selected_funds,
+            xirr_eligibility=(
+                selected_eligibility
+            ),
+        )
+    )
+
     st.dataframe(
-        transaction_history,
+        filtered_history,
         width="stretch",
         hide_index=True,
+    )
+
+    st.download_button(
+        "Download Filtered Transactions",
+        data=_build_transaction_history_csv(
+            filtered_history
+        ),
+        file_name="portfolio_transactions.csv",
+        mime="text/csv",
+        key="download_filtered_transactions",
     )
 
 

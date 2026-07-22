@@ -398,6 +398,8 @@ def test_render_portfolio_displays_transaction_history(
                 "Transaction ID": 1,
                 "Date": "2024-12-31",
                 "Fund ID": 1,
+                "Scheme Code": "122639",
+                "Fund": "UTI Nifty 50 Index Fund",
                 "Transaction Type": "OPENING_BALANCE",
                 "Units": 10.0,
                 "NAV": 80.0,
@@ -421,11 +423,21 @@ def test_render_portfolio_displays_transaction_history(
         portfolio_id=1,
     )
 
-    mock_dataframe.assert_called_once_with(
-        transaction_history,
-        width="stretch",
-        hide_index=True,
+    mock_dataframe.assert_called_once()
+
+    rendered_history = (
+        mock_dataframe.call_args.args[0]
     )
+
+    pd.testing.assert_frame_equal(
+        rendered_history,
+        transaction_history,
+    )
+
+    assert mock_dataframe.call_args.kwargs == {
+        "width": "stretch",
+        "hide_index": True,
+    }
 @patch("views.portfolio_view.st.info")
 @patch("views.portfolio_view.st.dataframe")
 @patch("views.portfolio_view.TransactionService")
@@ -446,6 +458,8 @@ def test_transaction_history_explains_unavailable_xirr(
                 "Transaction ID": 1,
                 "Date": "2024-12-31",
                 "Fund ID": 1,
+                "Scheme Code": "122639",
+                "Fund": "UTI Nifty 50 Index Fund",
                 "Transaction Type": "OPENING_BALANCE",
                 "Units": 10.0,
                 "NAV": 80.0,
@@ -492,6 +506,16 @@ def test_transaction_history_displays_eligibility_counts(
                 "2025-03-15",
             ],
             "Fund ID": [1, 1, 2],
+            "Scheme Code": [
+                "122639",
+                "122639",
+                "120503",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
             "Transaction Type": [
                 "OPENING_BALANCE",
                 "BUY",
@@ -545,4 +569,385 @@ def test_transaction_history_displays_eligibility_counts(
     excluded_column.metric.assert_called_once_with(
         "Excluded",
         1,
+    )
+
+def test_filter_transaction_history_by_transaction_type() -> None:
+    """Filter the ledger without modifying the source dataframe."""
+
+    from views import portfolio_view
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Date": [
+                "2024-12-31",
+                "2025-01-10",
+                "2025-03-15",
+            ],
+            "Fund ID": [1, 1, 2],
+            "Scheme Code": [
+                "122639",
+                "122639",
+                "120503",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "Units": [10.0, 10.0, 2.5],
+            "NAV": [80.0, 90.0, 100.0],
+            "Amount": [800.0, 900.0, 250.0],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+                250.0,
+            ],
+        }
+    )
+
+    result = (
+        portfolio_view
+        ._filter_transaction_history(
+            transaction_history,
+            transaction_types=("BUY",),
+            funds=(),
+            xirr_eligibility="All",
+        )
+    )
+
+    assert result["Transaction Type"].tolist() == [
+        "BUY",
+    ]
+    assert result.index.tolist() == [0]
+    assert len(transaction_history) == 3
+
+def test_filter_transaction_history_by_fund() -> None:
+    """Filter the ledger by one or more selected fund names."""
+
+    from views.portfolio_view import (
+        _filter_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+        }
+    )
+
+    result = _filter_transaction_history(
+        transaction_history,
+        transaction_types=(),
+        funds=(
+            "Parag Parikh Flexi Cap Fund",
+        ),
+        xirr_eligibility="All",
+    )
+
+    assert result["Fund"].tolist() == [
+        "Parag Parikh Flexi Cap Fund",
+    ]
+    assert result["Transaction ID"].tolist() == [
+        3,
+    ]
+    assert len(transaction_history) == 3
+def test_filter_transaction_history_by_xirr_eligibility() -> None:
+    """Filter the ledger to transactions excluded from XIRR."""
+
+    from views.portfolio_view import (
+        _filter_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+        }
+    )
+
+    result = _filter_transaction_history(
+        transaction_history,
+        transaction_types=(),
+        funds=(),
+        xirr_eligibility="Excluded",
+    )
+
+    assert result["Transaction ID"].tolist() == [
+        1,
+    ]
+    assert result["XIRR Eligible"].tolist() == [
+        False,
+    ]
+    assert len(transaction_history) == 3
+@patch("views.portfolio_view.st.selectbox")
+@patch("views.portfolio_view.st.multiselect")
+@patch("views.portfolio_view.st.columns")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_applies_selected_filters(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_columns,
+    mock_multiselect,
+    mock_selectbox,
+) -> None:
+    """Render only rows matching the selected ledger filters."""
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Date": [
+                "2024-12-31",
+                "2025-01-10",
+                "2025-03-15",
+            ],
+            "Fund ID": [1, 1, 2],
+            "Scheme Code": [
+                "122639",
+                "122639",
+                "120503",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "Units": [10.0, 10.0, 2.5],
+            "NAV": [80.0, 90.0, 100.0],
+            "Amount": [800.0, 900.0, 250.0],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+                250.0,
+            ],
+        }
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    mock_columns.return_value = (
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    )
+
+    mock_multiselect.side_effect = [
+        ["BUY"],
+        [],
+    ]
+    mock_selectbox.return_value = "All"
+
+    _render_transaction_history()
+
+    assert mock_multiselect.call_count == 2
+
+    mock_selectbox.assert_called_once_with(
+        "XIRR Eligibility",
+        options=[
+            "All",
+            "Eligible",
+            "Excluded",
+        ],
+        key="transaction_xirr_filter",
+    )
+
+    expected = transaction_history.iloc[
+        [1]
+    ].reset_index(
+        drop=True
+    )
+
+    mock_dataframe.assert_called_once()
+
+    rendered_history = (
+        mock_dataframe.call_args.args[0]
+    )
+
+    pd.testing.assert_frame_equal(
+        rendered_history,
+        expected,
+    )
+
+    assert mock_dataframe.call_args.kwargs == {
+        "width": "stretch",
+        "hide_index": True,
+    }
+def test_build_transaction_history_csv_uses_filtered_rows() -> None:
+    """Export only the transaction rows currently visible to the user."""
+
+    from views import portfolio_view
+
+    filtered_history = pd.DataFrame(
+        {
+            "Transaction ID": [3],
+            "Date": ["2025-03-15"],
+            "Fund ID": [2],
+            "Scheme Code": ["120503"],
+            "Fund": [
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": ["SELL"],
+            "Units": [2.5],
+            "NAV": [100.0],
+            "Amount": [250.0],
+            "XIRR Eligible": [True],
+            "Cash Flow": [250.0],
+        }
+    )
+
+    result = (
+        portfolio_view
+        ._build_transaction_history_csv(
+            filtered_history
+        )
+    )
+
+    assert isinstance(result, bytes)
+
+    csv_text = result.decode("utf-8")
+
+    assert (
+        "Transaction ID,Date,Fund ID,Scheme Code,Fund,"
+        "Transaction Type,Units,NAV,Amount,"
+        "XIRR Eligible,Cash Flow"
+        in csv_text
+    )
+
+    assert (
+        "3,2025-03-15,2,120503,"
+        "Parag Parikh Flexi Cap Fund,"
+        "SELL,2.5,100.0,250.0,True,250.0"
+        in csv_text
+    )
+
+    assert "UTI Nifty 50 Index Fund" not in csv_text
+@patch("views.portfolio_view.st.download_button")
+@patch("views.portfolio_view.st.selectbox")
+@patch("views.portfolio_view.st.multiselect")
+@patch("views.portfolio_view.st.columns")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_downloads_filtered_csv(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_columns,
+    mock_multiselect,
+    mock_selectbox,
+    mock_download_button,
+) -> None:
+    """Download the currently filtered transaction ledger."""
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [2],
+            "Date": ["2025-01-10"],
+            "Fund ID": [1],
+            "Scheme Code": ["122639"],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+            ],
+            "Transaction Type": ["BUY"],
+            "Units": [10.0],
+            "NAV": [90.0],
+            "Amount": [900.0],
+            "XIRR Eligible": [True],
+            "Cash Flow": [-900.0],
+        }
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    mock_columns.return_value = (
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    )
+
+    mock_multiselect.side_effect = [
+        ["BUY"],
+        [],
+    ]
+    mock_selectbox.return_value = "All"
+
+    _render_transaction_history()
+
+    expected_csv = transaction_history.to_csv(
+        index=False,
+    ).encode(
+        "utf-8"
+    )
+
+    mock_download_button.assert_called_once_with(
+        "Download Filtered Transactions",
+        data=expected_csv,
+        file_name="portfolio_transactions.csv",
+        mime="text/csv",
+        key="download_filtered_transactions",
     )
