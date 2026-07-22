@@ -11,6 +11,7 @@ from dashboard.components.portfolio import show_portfolio
 from dashboard.components.portfolio_summary import show_portfolio_summary
 from services.portfolio_service import PortfolioService
 from services.transaction_import_service import TransactionImportService
+from services.transaction_service import TransactionService
 
 
 def _build_transaction_preview(
@@ -47,8 +48,12 @@ def _import_uploaded_transactions(
             suffix=".csv",
             delete=False,
         ) as temporary_file:
-            temporary_file.write(uploaded_file.getvalue())
-            temporary_path = Path(temporary_file.name)
+            temporary_file.write(
+                uploaded_file.getvalue()
+            )
+            temporary_path = Path(
+                temporary_file.name
+            )
 
         import_service = TransactionImportService()
 
@@ -59,7 +64,9 @@ def _import_uploaded_transactions(
         )
     finally:
         if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+            temporary_path.unlink(
+                missing_ok=True
+            )
 
 
 def _preview_uploaded_transactions(
@@ -77,7 +84,6 @@ def _render_transaction_import() -> None:
     """Render the transaction-history CSV import section."""
 
     st.divider()
-
     st.subheader("📥 Import Transactions")
 
     st.caption(
@@ -94,8 +100,10 @@ def _render_transaction_import() -> None:
         return
 
     try:
-        transactions = _preview_uploaded_transactions(
-            uploaded_file
+        transactions = (
+            _preview_uploaded_transactions(
+                uploaded_file
+            )
         )
     except ValueError as error:
         st.error(
@@ -136,9 +144,11 @@ def _render_transaction_import() -> None:
         return
 
     try:
-        persisted_transactions = _import_uploaded_transactions(
-            uploaded_file,
-            persist=True,
+        persisted_transactions = (
+            _import_uploaded_transactions(
+                uploaded_file,
+                persist=True,
+            )
         )
     except ValueError as error:
         st.error(
@@ -166,6 +176,70 @@ def _render_transaction_import() -> None:
     st.rerun()
 
 
+def _render_transaction_history() -> None:
+    """Render the auditable Portfolio transaction ledger."""
+
+    st.divider()
+    st.subheader("🧾 Transaction History")
+
+    st.caption(
+        "BUY and SELL transactions are eligible for Portfolio XIRR. "
+        "OPENING_BALANCE records remain visible but are excluded."
+    )
+
+    transaction_service = TransactionService()
+
+    transaction_history = (
+        transaction_service.get_transaction_history(
+            portfolio_id=1,
+        )
+    )
+
+    total_count = len(
+        transaction_history
+    )
+
+    eligible_count = int(
+        transaction_history[
+            "XIRR Eligible"
+        ]
+        .fillna(False)
+        .astype(bool)
+        .sum()
+    )
+
+    excluded_count = (
+        total_count - eligible_count
+    )
+
+    summary_columns = st.columns(3)
+
+    summary_columns[0].metric(
+        "Total Transactions",
+        total_count,
+    )
+    summary_columns[1].metric(
+        "XIRR Eligible",
+        eligible_count,
+    )
+    summary_columns[2].metric(
+        "Excluded",
+        excluded_count,
+    )
+
+    if eligible_count == 0:
+        st.info(
+            "Portfolio XIRR is unavailable because no eligible "
+            "BUY or SELL transactions exist."
+        )
+
+    st.dataframe(
+        transaction_history,
+        width="stretch",
+        hide_index=True,
+    )
+
+
 def render_portfolio() -> None:
     """Render the complete Portfolio page."""
 
@@ -174,14 +248,22 @@ def render_portfolio() -> None:
     service = PortfolioService()
     portfolio = service.get_portfolio()
 
-    show_portfolio_summary(portfolio)
+    show_portfolio_summary(
+        portfolio
+    )
 
     st.divider()
 
-    show_portfolio(portfolio)
+    show_portfolio(
+        portfolio
+    )
 
     _render_transaction_import()
 
+    _render_transaction_history()
+
     st.divider()
 
-    show_history(service.loader.project_root)
+    show_history(
+        service.loader.project_root
+    )

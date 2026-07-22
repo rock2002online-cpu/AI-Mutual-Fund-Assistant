@@ -976,3 +976,140 @@ def test_transaction_service_uses_default_unit_of_work() -> None:
     service = TransactionService()
 
     assert service._unit_of_work_factory is UnitOfWork
+
+def test_get_transaction_history_labels_xirr_eligibility() -> None:
+    """Return a fund-labelled ledger including opening balances."""
+
+    from datetime import date
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    from services.transaction_service import TransactionService
+
+    fund_one = SimpleNamespace(
+        scheme_code="122639",
+        name="UTI Nifty 50 Index Fund",
+    )
+
+    fund_two = SimpleNamespace(
+        scheme_code="120503",
+        name="Parag Parikh Flexi Cap Fund",
+    )
+
+    transactions = [
+        SimpleNamespace(
+            id=1,
+            portfolio_id=1,
+            fund_id=1,
+            fund=fund_one,
+            transaction_date=date(2024, 12, 31),
+            transaction_type="OPENING_BALANCE",
+            units=10.0,
+            nav=80.0,
+            amount=800.0,
+        ),
+        SimpleNamespace(
+            id=2,
+            portfolio_id=1,
+            fund_id=1,
+            fund=fund_one,
+            transaction_date=date(2025, 1, 10),
+            transaction_type="BUY",
+            units=10.0,
+            nav=90.0,
+            amount=900.0,
+        ),
+        SimpleNamespace(
+            id=3,
+            portfolio_id=1,
+            fund_id=2,
+            fund=fund_two,
+            transaction_date=date(2025, 3, 15),
+            transaction_type="SELL",
+            units=2.5,
+            nav=100.0,
+            amount=250.0,
+        ),
+    ]
+
+    class FakeTransactionRepository:
+        def get_for_portfolio(
+            self,
+            portfolio_id: int,
+        ):
+            assert portfolio_id == 1
+            return transactions
+
+    class FakeUnitOfWork:
+        def __init__(self) -> None:
+            self.transactions = FakeTransactionRepository()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(
+            self,
+            exception_type,
+            exception_value,
+            traceback,
+        ) -> None:
+            return None
+
+    service = TransactionService(
+        unit_of_work_factory=FakeUnitOfWork,
+    )
+
+    result = service.get_transaction_history(
+        portfolio_id=1,
+    )
+
+    assert result.columns.tolist() == [
+        "Transaction ID",
+        "Date",
+        "Fund ID",
+        "Scheme Code",
+        "Fund",
+        "Transaction Type",
+        "Units",
+        "NAV",
+        "Amount",
+        "XIRR Eligible",
+        "Cash Flow",
+    ]
+
+    assert result["Scheme Code"].tolist() == [
+        "122639",
+        "122639",
+        "120503",
+    ]
+
+    assert result["Fund"].tolist() == [
+        "UTI Nifty 50 Index Fund",
+        "UTI Nifty 50 Index Fund",
+        "Parag Parikh Flexi Cap Fund",
+    ]
+
+    assert result["Transaction Type"].tolist() == [
+        "OPENING_BALANCE",
+        "BUY",
+        "SELL",
+    ]
+
+    assert result["XIRR Eligible"].tolist() == [
+        False,
+        True,
+        True,
+    ]
+
+    assert pd.isna(
+        result.loc[0, "Cash Flow"]
+    )
+    assert (
+        result.loc[1, "Cash Flow"]
+        == -900.0
+    )
+    assert (
+        result.loc[2, "Cash Flow"]
+        == 250.0
+    )

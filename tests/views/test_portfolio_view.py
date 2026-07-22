@@ -365,3 +365,184 @@ def test_empty_transaction_preview_cannot_be_imported(
         portfolio_id=1,
         persist=False,
     )
+
+@patch("views.portfolio_view.st.dataframe")
+@patch(
+    "views.portfolio_view.TransactionService",
+    create=True,
+)
+@patch("views.portfolio_view.show_history")
+@patch("views.portfolio_view.show_portfolio")
+@patch("views.portfolio_view.show_portfolio_summary")
+@patch("views.portfolio_view.PortfolioService")
+@patch("views.portfolio_view.st.file_uploader")
+def test_render_portfolio_displays_transaction_history(
+    mock_file_uploader,
+    mock_portfolio_service_class,
+    mock_show_portfolio_summary,
+    mock_show_portfolio,
+    mock_show_history,
+    mock_transaction_service_class,
+    mock_dataframe,
+) -> None:
+    """Load and display the auditable Portfolio transaction ledger."""
+
+    portfolio_service = mock_portfolio_service_class.return_value
+    portfolio_service.get_portfolio.return_value = pd.DataFrame()
+    portfolio_service.loader.project_root = "/project"
+    mock_file_uploader.return_value = None
+
+    transaction_history = pd.DataFrame(
+        [
+            {
+                "Transaction ID": 1,
+                "Date": "2024-12-31",
+                "Fund ID": 1,
+                "Transaction Type": "OPENING_BALANCE",
+                "Units": 10.0,
+                "NAV": 80.0,
+                "Amount": 800.0,
+                "XIRR Eligible": False,
+                "Cash Flow": None,
+            }
+        ]
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    render_portfolio()
+
+    transaction_service.get_transaction_history.assert_called_once_with(
+        portfolio_id=1,
+    )
+
+    mock_dataframe.assert_called_once_with(
+        transaction_history,
+        width="stretch",
+        hide_index=True,
+    )
+@patch("views.portfolio_view.st.info")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_explains_unavailable_xirr(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_info,
+) -> None:
+    """Explain XIRR unavailability when no eligible cash flows exist."""
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        [
+            {
+                "Transaction ID": 1,
+                "Date": "2024-12-31",
+                "Fund ID": 1,
+                "Transaction Type": "OPENING_BALANCE",
+                "Units": 10.0,
+                "NAV": 80.0,
+                "Amount": 800.0,
+                "XIRR Eligible": False,
+                "Cash Flow": None,
+            }
+        ]
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    _render_transaction_history()
+
+    mock_info.assert_called_once_with(
+        "Portfolio XIRR is unavailable because no eligible "
+        "BUY or SELL transactions exist."
+    )
+@patch("views.portfolio_view.st.columns")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_displays_eligibility_counts(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_columns,
+) -> None:
+    """Summarize total, XIRR-eligible, and excluded transactions."""
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Date": [
+                "2024-12-31",
+                "2025-01-10",
+                "2025-03-15",
+            ],
+            "Fund ID": [1, 1, 2],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "Units": [10.0, 10.0, 2.5],
+            "NAV": [80.0, 90.0, 100.0],
+            "Amount": [800.0, 900.0, 250.0],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+                250.0,
+            ],
+        }
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    total_column = MagicMock()
+    eligible_column = MagicMock()
+    excluded_column = MagicMock()
+
+    mock_columns.return_value = (
+        total_column,
+        eligible_column,
+        excluded_column,
+    )
+
+    _render_transaction_history()
+
+    mock_columns.assert_called_once_with(3)
+
+    total_column.metric.assert_called_once_with(
+        "Total Transactions",
+        3,
+    )
+    eligible_column.metric.assert_called_once_with(
+        "XIRR Eligible",
+        2,
+    )
+    excluded_column.metric.assert_called_once_with(
+        "Excluded",
+        1,
+    )
