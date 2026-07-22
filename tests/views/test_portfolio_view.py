@@ -1,6 +1,6 @@
 """Tests for the Portfolio page view."""
 
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pandas as pd
 
@@ -548,15 +548,30 @@ def test_transaction_history_displays_eligibility_counts(
     eligible_column = MagicMock()
     excluded_column = MagicMock()
 
-    mock_columns.return_value = (
-        total_column,
-        eligible_column,
-        excluded_column,
-    )
+    mock_columns.side_effect = [
+        (
+            total_column,
+            eligible_column,
+            excluded_column,
+        ),
+        (
+            MagicMock(),
+            MagicMock(),
+        ),
+        (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        ),
+    ]
 
     _render_transaction_history()
 
-    mock_columns.assert_called_once_with(3)
+    assert mock_columns.call_args_list == [
+        call(3),
+        call(2),
+        call(3),
+    ]
 
     total_column.metric.assert_called_once_with(
         "Total Transactions",
@@ -950,4 +965,340 @@ def test_transaction_history_downloads_filtered_csv(
         file_name="portfolio_transactions.csv",
         mime="text/csv",
         key="download_filtered_transactions",
+    )
+def test_filter_transaction_history_by_date_range() -> None:
+    """Filter transactions using inclusive start and end dates."""
+
+    from datetime import date
+
+    from views.portfolio_view import (
+        _filter_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Date": [
+                "2024-12-31",
+                "2025-01-10",
+                "2025-03-15",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+        }
+    )
+
+    result = _filter_transaction_history(
+        transaction_history,
+        transaction_types=(),
+        funds=(),
+        xirr_eligibility="All",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
+
+    assert result["Transaction ID"].tolist() == [
+        2,
+    ]
+    assert len(transaction_history) == 3
+@patch("views.portfolio_view.st.download_button")
+@patch("views.portfolio_view.st.date_input")
+@patch("views.portfolio_view.st.selectbox")
+@patch("views.portfolio_view.st.multiselect")
+@patch("views.portfolio_view.st.columns")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_applies_date_range_controls(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_columns,
+    mock_multiselect,
+    mock_selectbox,
+    mock_date_input,
+    mock_download_button,
+) -> None:
+    """Apply inclusive start and end dates to the visible ledger."""
+
+    from datetime import date
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2, 3],
+            "Date": [
+                date(2024, 12, 31),
+                date(2025, 1, 10),
+                date(2025, 3, 15),
+            ],
+            "Fund ID": [1, 1, 2],
+            "Scheme Code": [
+                "122639",
+                "122639",
+                "120503",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+                "Parag Parikh Flexi Cap Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "Units": [10.0, 10.0, 2.5],
+            "NAV": [80.0, 90.0, 100.0],
+            "Amount": [800.0, 900.0, 250.0],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+                250.0,
+            ],
+        }
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    mock_columns.return_value = (
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    )
+    mock_multiselect.side_effect = [
+        [],
+        [],
+    ]
+    mock_selectbox.return_value = "All"
+    mock_date_input.side_effect = [
+        date(2025, 1, 1),
+        date(2025, 1, 31),
+    ]
+
+    _render_transaction_history()
+
+    assert mock_date_input.call_count == 2
+
+    expected = transaction_history.iloc[
+        [1]
+    ].reset_index(
+        drop=True
+    )
+
+    rendered_history = (
+        mock_dataframe.call_args.args[0]
+    )
+
+    pd.testing.assert_frame_equal(
+        rendered_history,
+        expected,
+    )
+@patch("views.portfolio_view.st.columns")
+def test_render_transaction_cash_flow_summary(
+    mock_columns,
+) -> None:
+    """Render eligible transaction counts and signed cash-flow totals."""
+
+    from views import portfolio_view
+
+    buy_count_column = MagicMock()
+    sell_count_column = MagicMock()
+
+    buy_outflow_column = MagicMock()
+    sell_inflow_column = MagicMock()
+    net_cash_flow_column = MagicMock()
+
+    mock_columns.side_effect = [
+        (
+            buy_count_column,
+            sell_count_column,
+        ),
+        (
+            buy_outflow_column,
+            sell_inflow_column,
+            net_cash_flow_column,
+        ),
+    ]
+
+    portfolio_view._render_transaction_cash_flow_summary(
+        {
+            "buy_count": 1,
+            "sell_count": 1,
+            "buy_outflow": 900.0,
+            "sell_inflow": 250.0,
+            "net_cash_flow": -650.0,
+        }
+    )
+
+    assert mock_columns.call_args_list == [
+        call(2),
+        call(3),
+    ]
+
+    buy_count_column.metric.assert_called_once_with(
+        "BUY Transactions",
+        1,
+    )
+    sell_count_column.metric.assert_called_once_with(
+        "SELL Transactions",
+        1,
+    )
+    buy_outflow_column.metric.assert_called_once_with(
+        "BUY Outflow",
+        "₹900.00",
+    )
+    sell_inflow_column.metric.assert_called_once_with(
+        "SELL Inflow",
+        "₹250.00",
+    )
+    net_cash_flow_column.metric.assert_called_once_with(
+        "Net Cash Flow",
+        "-₹650.00",
+    )
+@patch(
+    "views.portfolio_view."
+    "_render_transaction_cash_flow_summary"
+)
+@patch("views.portfolio_view.st.download_button")
+@patch("views.portfolio_view.st.date_input")
+@patch("views.portfolio_view.st.selectbox")
+@patch("views.portfolio_view.st.multiselect")
+@patch("views.portfolio_view.st.columns")
+@patch("views.portfolio_view.st.dataframe")
+@patch("views.portfolio_view.TransactionService")
+def test_transaction_history_summarizes_filtered_cash_flows(
+    mock_transaction_service_class,
+    mock_dataframe,
+    mock_columns,
+    mock_multiselect,
+    mock_selectbox,
+    mock_date_input,
+    mock_download_button,
+    mock_render_cash_flow_summary,
+) -> None:
+    """Calculate cash-flow metrics from only the visible ledger rows."""
+
+    from datetime import date
+
+    from views.portfolio_view import (
+        _render_transaction_history,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction ID": [1, 2],
+            "Date": [
+                date(2024, 12, 31),
+                date(2025, 1, 10),
+            ],
+            "Fund ID": [1, 1],
+            "Scheme Code": [
+                "122639",
+                "122639",
+            ],
+            "Fund": [
+                "UTI Nifty 50 Index Fund",
+                "UTI Nifty 50 Index Fund",
+            ],
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+            ],
+            "Units": [10.0, 10.0],
+            "NAV": [80.0, 90.0],
+            "Amount": [800.0, 900.0],
+            "XIRR Eligible": [
+                False,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+            ],
+        }
+    )
+
+    transaction_service = (
+        mock_transaction_service_class.return_value
+    )
+    transaction_service.get_transaction_history.return_value = (
+        transaction_history
+    )
+
+    cash_flow_summary = {
+        "buy_count": 1,
+        "sell_count": 0,
+        "buy_outflow": 900.0,
+        "sell_inflow": 0.0,
+        "net_cash_flow": -900.0,
+    }
+
+    transaction_service.calculate_cash_flow_summary.return_value = (
+        cash_flow_summary
+    )
+
+    mock_columns.return_value = (
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+    )
+    mock_multiselect.side_effect = [
+        ["BUY"],
+        [],
+    ]
+    mock_selectbox.return_value = "All"
+    mock_date_input.side_effect = [
+        date(2024, 12, 31),
+        date(2025, 1, 10),
+    ]
+
+    _render_transaction_history()
+
+    transaction_service.calculate_cash_flow_summary.assert_called_once()
+
+    summarized_history = (
+        transaction_service
+        .calculate_cash_flow_summary
+        .call_args
+        .args[0]
+    )
+
+    expected_history = transaction_history.iloc[
+        [1]
+    ].reset_index(
+        drop=True
+    )
+
+    pd.testing.assert_frame_equal(
+        summarized_history,
+        expected_history,
+    )
+
+    mock_render_cash_flow_summary.assert_called_once_with(
+        cash_flow_summary
     )

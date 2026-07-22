@@ -1113,3 +1113,51 @@ def test_get_transaction_history_labels_xirr_eligibility() -> None:
         result.loc[2, "Cash Flow"]
         == 250.0
     )
+def test_calculate_cash_flow_summary_excludes_opening_balances() -> None:
+    """Summarize only XIRR-eligible BUY and SELL cash flows."""
+
+    import pandas as pd
+
+    from services.transaction_service import (
+        TransactionService,
+    )
+
+    transaction_history = pd.DataFrame(
+        {
+            "Transaction Type": [
+                "OPENING_BALANCE",
+                "BUY",
+                "SELL",
+            ],
+            "Amount": [
+                800.0,
+                900.0,
+                250.0,
+            ],
+            "XIRR Eligible": [
+                False,
+                True,
+                True,
+            ],
+            "Cash Flow": [
+                None,
+                -900.0,
+                250.0,
+            ],
+        }
+    )
+
+    result = (
+        TransactionService
+        .calculate_cash_flow_summary(
+            transaction_history
+        )
+    )
+
+    assert result == {
+        "buy_count": 1,
+        "sell_count": 1,
+        "buy_outflow": 900.0,
+        "sell_inflow": 250.0,
+        "net_cash_flow": -650.0,
+    }
