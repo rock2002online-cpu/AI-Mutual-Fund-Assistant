@@ -389,3 +389,59 @@ def test_transactions_are_returned_in_chronological_order(
         date(2026, 2, 1),
         date(2026, 3, 1),
     ]
+def test_get_for_portfolio_through_date_is_inclusive(
+    session: Session,
+) -> None:
+    """Point-in-time query should be portfolio-scoped and inclusive."""
+
+    repository = TransactionRepository(session)
+
+    portfolio = create_portfolio(session)
+    other_portfolio = create_portfolio(session)
+    fund = create_fund(session)
+
+    repository.add(
+        create_transaction(
+            portfolio_id=portfolio.id,
+            fund_id=fund.id,
+            transaction_date=date(2026, 1, 1),
+        )
+    )
+    repository.add(
+        create_transaction(
+            portfolio_id=portfolio.id,
+            fund_id=fund.id,
+            transaction_date=date(2026, 2, 1),
+        )
+    )
+    repository.add(
+        create_transaction(
+            portfolio_id=portfolio.id,
+            fund_id=fund.id,
+            transaction_date=date(2026, 3, 1),
+        )
+    )
+    repository.add(
+        create_transaction(
+            portfolio_id=other_portfolio.id,
+            fund_id=fund.id,
+            transaction_date=date(2026, 1, 15),
+        )
+    )
+
+    results = repository.get_for_portfolio_through_date(
+        portfolio_id=portfolio.id,
+        end_date=date(2026, 2, 1),
+    )
+
+    assert [
+        transaction.transaction_date
+        for transaction in results
+    ] == [
+        date(2026, 1, 1),
+        date(2026, 2, 1),
+    ]
+    assert all(
+        transaction.portfolio_id == portfolio.id
+        for transaction in results
+    )
