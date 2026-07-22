@@ -27,10 +27,110 @@ class TransactionService:
         )
 
         self._unit_of_work_factory = resolved_unit_of_work_factory
+
         self._holdings_service = (
             holdings_service
             if holdings_service is not None
-            else HoldingsService(resolved_unit_of_work_factory)
+            else HoldingsService(
+                resolved_unit_of_work_factory
+            )
+        )
+
+    def get_transaction_history(
+        self,
+        *,
+        portfolio_id: int,
+    ) -> pd.DataFrame:
+        """
+        Return an auditable transaction ledger for a portfolio.
+
+        BUY and SELL transactions are marked as XIRR eligible and receive
+        signed cash-flow values. OPENING_BALANCE and any other transaction
+        types remain visible but are excluded from XIRR.
+
+        Fund relationship data is resolved while the UnitOfWork session is
+        open so callers receive display-ready scheme codes and fund names.
+        """
+
+        rows: list[dict[str, object]] = []
+
+        with self._unit_of_work_factory() as unit_of_work:
+            transactions = (
+                unit_of_work.transactions.get_for_portfolio(
+                    portfolio_id
+                )
+            )
+
+            for transaction in transactions:
+                transaction_type = str(
+                    transaction.transaction_type
+                ).strip().upper()
+
+                xirr_eligible = transaction_type in {
+                    "BUY",
+                    "SELL",
+                }
+
+                cash_flow = None
+
+                if transaction_type == "BUY":
+                    cash_flow = -float(
+                        transaction.amount
+                    )
+                elif transaction_type == "SELL":
+                    cash_flow = float(
+                        transaction.amount
+                    )
+
+                fund = transaction.fund
+
+                rows.append(
+                    {
+                        "Transaction ID": transaction.id,
+                        "Date": transaction.transaction_date,
+                        "Fund ID": transaction.fund_id,
+                        "Scheme Code": str(
+                            fund.scheme_code
+                        ),
+                        "Fund": str(
+                            fund.name
+                        ),
+                        "Transaction Type": transaction_type,
+                        "Units": float(
+                            transaction.units
+                        ),
+                        "NAV": float(
+                            transaction.nav
+                        ),
+                        "Amount": float(
+                            transaction.amount
+                        ),
+                        "XIRR Eligible": xirr_eligible,
+                        "Cash Flow": cash_flow,
+                    }
+                )
+
+        return pd.DataFrame(
+            rows,
+            columns=[
+                "Transaction ID",
+                "Date",
+                "Fund ID",
+                "Scheme Code",
+                "Fund",
+                "Transaction Type",
+                "Units",
+                "NAV",
+                "Amount",
+                "XIRR Eligible",
+                "Cash Flow",
+            ],
+        ).sort_values(
+            [
+                "Date",
+                "Transaction ID",
+            ],
+            ignore_index=True,
         )
 
     def get_cash_flow_history(
@@ -41,8 +141,10 @@ class TransactionService:
         """Return signed BUY and SELL cash flows for portfolio XIRR."""
 
         with self._unit_of_work_factory() as unit_of_work:
-            transactions = unit_of_work.transactions.get_for_portfolio(
-                portfolio_id
+            transactions = (
+                unit_of_work.transactions.get_for_portfolio(
+                    portfolio_id
+                )
             )
 
         cash_flows = [
@@ -55,12 +157,18 @@ class TransactionService:
                 ),
             }
             for transaction in transactions
-            if transaction.transaction_type in {"BUY", "SELL"}
+            if transaction.transaction_type in {
+                "BUY",
+                "SELL",
+            }
         ]
 
         return pd.DataFrame(
             cash_flows,
-            columns=["Date", "Amount"],
+            columns=[
+                "Date",
+                "Amount",
+            ],
         ).sort_values(
             "Date",
             ignore_index=True,
@@ -104,8 +212,10 @@ class TransactionService:
         )
 
         with self._unit_of_work_factory() as unit_of_work:
-            persisted = unit_of_work.transactions.add(
-                transaction
+            persisted = (
+                unit_of_work.transactions.add(
+                    transaction
+                )
             )
             unit_of_work.commit()
 
@@ -173,8 +283,10 @@ class TransactionService:
                 transaction_date=effective_date,
             )
 
-            persisted = unit_of_work.transactions.add(
-                transaction
+            persisted = (
+                unit_of_work.transactions.add(
+                    transaction
+                )
             )
             unit_of_work.commit()
 
