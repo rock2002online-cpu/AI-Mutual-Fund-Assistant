@@ -29,6 +29,7 @@ from services.analytics.history_analytics import (
 from services.analytics.performance import (
     PortfolioPerformanceMetrics,
 )
+from services.tax_lot_service import TaxLotAnalysis
 
 
 # ============================================================
@@ -71,6 +72,8 @@ class PortfolioReport:
     advanced_analytics: (
         AdvancedAnalyticsServiceResult | None
     ) = None
+
+    tax_lot_analysis: TaxLotAnalysis | None = None
 
     ai_summary: dict[str, Any] = field(
         default_factory=dict
