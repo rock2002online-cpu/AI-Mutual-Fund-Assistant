@@ -387,9 +387,14 @@ def test_render_portfolio_displays_transaction_history(
 ) -> None:
     """Load and display the auditable Portfolio transaction ledger."""
 
-    portfolio_service = mock_portfolio_service_class.return_value
-    portfolio_service.get_portfolio.return_value = pd.DataFrame()
+    portfolio_service = (
+        mock_portfolio_service_class.return_value
+    )
+    portfolio_service.get_portfolio.return_value = (
+        pd.DataFrame()
+    )
     portfolio_service.loader.project_root = "/project"
+
     mock_file_uploader.return_value = None
 
     transaction_history = pd.DataFrame(
@@ -417,7 +422,10 @@ def test_render_portfolio_displays_transaction_history(
         transaction_history
     )
 
-    render_portfolio()
+    with patch(
+        "views.portfolio_view.render_tax_lot_section"
+    ):
+        render_portfolio()
 
     transaction_service.get_transaction_history.assert_called_once_with(
         portfolio_id=1,
@@ -438,6 +446,8 @@ def test_render_portfolio_displays_transaction_history(
         "width": "stretch",
         "hide_index": True,
     }
+
+
 @patch("views.portfolio_view.st.info")
 @patch("views.portfolio_view.st.dataframe")
 @patch("views.portfolio_view.TransactionService")
@@ -1301,4 +1311,46 @@ def test_transaction_history_summarizes_filtered_cash_flows(
 
     mock_render_cash_flow_summary.assert_called_once_with(
         cash_flow_summary
+    )
+def test_render_portfolio_displays_tax_lot_analytics() -> None:
+    """Render Version 13 tax-lot analytics on the Portfolio page."""
+
+    with (
+        patch(
+            "views.portfolio_view.PortfolioService"
+        ) as mock_portfolio_service_class,
+        patch(
+            "views.portfolio_view.show_portfolio_summary"
+        ),
+        patch(
+            "views.portfolio_view.show_portfolio"
+        ),
+        patch(
+            "views.portfolio_view.show_history"
+        ),
+        patch(
+            "views.portfolio_view._render_transaction_import"
+        ),
+        patch(
+            "views.portfolio_view._render_transaction_history"
+        ),
+        patch(
+            "views.portfolio_view.render_tax_lot_section",
+            create=True,
+        ) as mock_render_tax_lot_section,
+    ):
+        portfolio_service = (
+            mock_portfolio_service_class.return_value
+        )
+        portfolio_service.get_portfolio.return_value = (
+            pd.DataFrame()
+        )
+        portfolio_service.loader.project_root = (
+            "/project"
+        )
+
+        render_portfolio()
+
+    mock_render_tax_lot_section.assert_called_once_with(
+        portfolio_id=1,
     )

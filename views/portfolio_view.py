@@ -10,6 +10,7 @@ import streamlit as st
 from dashboard.components.history import show_history
 from dashboard.components.portfolio import show_portfolio
 from dashboard.components.portfolio_summary import show_portfolio_summary
+from views.tax_lot_view import render_tax_lot_section
 from services.portfolio_service import PortfolioService
 from services.transaction_import_service import TransactionImportService
 from services.transaction_service import TransactionService
@@ -521,6 +522,12 @@ def render_portfolio() -> None:
     _render_transaction_import()
 
     _render_transaction_history()
+
+    st.divider()
+
+    render_tax_lot_section(
+        portfolio_id=1,
+    )
 
     st.divider()
 
