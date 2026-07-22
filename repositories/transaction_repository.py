@@ -40,6 +40,27 @@ class TransactionRepository(BaseRepository[Transaction]):
             self.session.scalars(statement)
         )
 
+    def get_for_portfolio_through_date(
+        self,
+        *,
+        portfolio_id: int,
+        end_date: date,
+    ) -> list[Transaction]:
+        """Return portfolio transactions through an inclusive date."""
+
+        statement = (
+            select(Transaction)
+            .where(
+                Transaction.portfolio_id == portfolio_id,
+                Transaction.transaction_date <= end_date,
+            )
+            .order_by(Transaction.transaction_date)
+        )
+
+        return list(
+            self.session.scalars(statement)
+        )
+
     def get_for_fund(
         self,
         fund_id: int,
