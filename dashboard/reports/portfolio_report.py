@@ -51,6 +51,9 @@ from services.reporting.report_models import (
     PortfolioReport,
     ReportMetadata,
 )
+from services.portfolio_reconciliation_service import (
+    PortfolioReconciliationResult,
+)
 
 
 # ============================================================
@@ -321,6 +324,26 @@ def _validate_advanced_analytics(
         )
 
     return advanced_analytics
+def _validate_reconciliation(
+    reconciliation: (
+        PortfolioReconciliationResult | None
+    ),
+) -> PortfolioReconciliationResult | None:
+    """Validate optional portfolio-reconciliation input."""
+
+    if (
+        reconciliation is not None
+        and not isinstance(
+            reconciliation,
+            PortfolioReconciliationResult,
+        )
+    ):
+        raise TypeError(
+            "reconciliation must be a "
+            "PortfolioReconciliationResult or None."
+        )
+
+    return reconciliation
 
 
 def _normalise_ai_summary(
@@ -467,6 +490,9 @@ def build_portfolio_report(
     advanced_analytics: (
         AdvancedAnalyticsServiceResult | None
     ) = None,
+    reconciliation: (
+        PortfolioReconciliationResult | None
+    ) = None,
     ai_summary: Mapping[str, Any] | None = None,
     notes: Sequence[str] | None = None,
     warnings: Sequence[str] | None = None,
@@ -489,6 +515,9 @@ def build_portfolio_report(
 
         advanced_analytics:
             Existing advanced-analytics service result.
+
+        reconciliation:
+            Existing portfolio-reconciliation result.
 
         ai_summary:
             Existing AI insight content.
@@ -531,6 +560,11 @@ def build_portfolio_report(
             advanced_analytics
         )
     )
+    validated_reconciliation = (
+        _validate_reconciliation(
+            reconciliation
+        )
+    )
 
     normalized_title = (
         _validate_non_blank_text(
@@ -570,6 +604,9 @@ def build_portfolio_report(
         history=validated_history,
         advanced_analytics=(
             validated_advanced
+        ),
+        reconciliation=(
+            validated_reconciliation
         ),
         ai_summary=_normalise_ai_summary(
             ai_summary
@@ -747,6 +784,9 @@ def build_portfolio_report_bundle(
     advanced_analytics: (
         AdvancedAnalyticsServiceResult | None
     ) = None,
+    reconciliation: (
+        PortfolioReconciliationResult | None
+    ) = None,
     ai_summary: Mapping[str, Any] | None = None,
     notes: Sequence[str] | None = None,
     warnings: Sequence[str] | None = None,
@@ -765,6 +805,7 @@ def build_portfolio_report_bundle(
         performance,
         history=history,
         advanced_analytics=advanced_analytics,
+        reconciliation=reconciliation,
         ai_summary=ai_summary,
         notes=notes,
         warnings=warnings,

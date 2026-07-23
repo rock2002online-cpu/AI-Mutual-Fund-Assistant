@@ -30,7 +30,9 @@ from services.analytics.performance import (
     PortfolioPerformanceMetrics,
 )
 from services.tax_lot_service import TaxLotAnalysis
-
+from services.portfolio_reconciliation_service import (
+    PortfolioReconciliationResult,
+)
 
 # ============================================================
 # Report Metadata
@@ -74,7 +76,9 @@ class PortfolioReport:
     ) = None
 
     tax_lot_analysis: TaxLotAnalysis | None = None
-
+    reconciliation: (
+        PortfolioReconciliationResult | None
+    ) = None
     ai_summary: dict[str, Any] = field(
         default_factory=dict
     )

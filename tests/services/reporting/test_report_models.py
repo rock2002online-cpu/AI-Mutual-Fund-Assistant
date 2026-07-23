@@ -11,6 +11,9 @@ from services.reporting.report_models import (
     ReportMetadata,
 )
 from services.tax_lot_service import TaxLotAnalysis
+from services.portfolio_reconciliation_service import (
+    PortfolioReconciliationResult,
+)
 
 
 def test_portfolio_report_carries_tax_lot_analysis() -> None:
@@ -36,3 +39,26 @@ def test_portfolio_report_carries_tax_lot_analysis() -> None:
     )
 
     assert report.tax_lot_analysis is tax_lot_analysis
+def test_portfolio_report_carries_reconciliation_result() -> None:
+    """Reports should expose precomputed portfolio reconciliation."""
+
+    metadata = ReportMetadata(
+        title="Portfolio Reconciliation Report",
+        version="15.0",
+        generated_at=datetime(2026, 7, 23, 12, 0),
+    )
+    performance = Mock(
+        spec=PortfolioPerformanceMetrics,
+    )
+    reconciliation = PortfolioReconciliationResult(
+        items=[],
+        is_reconciled=True,
+    )
+
+    report = PortfolioReport(
+        metadata=metadata,
+        performance=performance,
+        reconciliation=reconciliation,
+    )
+
+    assert report.reconciliation is reconciliation
