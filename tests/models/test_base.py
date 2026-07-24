@@ -34,6 +34,7 @@ def test_expected_tables_are_registered() -> None:
         "nav_history",
         "reconciliation_audit_snapshots",
         "reconciliation_audit_items",
+        "reconciliation_exceptions",
     }
 
 
