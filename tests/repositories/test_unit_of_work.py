@@ -22,6 +22,7 @@ def test_unit_of_work_creates_repositories() -> None:
     with UnitOfWork() as uow:
         assert uow.funds is not None
         assert uow.portfolios is not None
+        assert uow.reconciliation_audits is not None
 
 
 def test_commit_without_context_raises() -> None:

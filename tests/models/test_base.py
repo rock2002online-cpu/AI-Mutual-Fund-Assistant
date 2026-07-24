@@ -8,7 +8,14 @@ from datetime import timezone
 
 from sqlalchemy import inspect
 
-from models import Fund, NAVHistory, Portfolio, Transaction
+from models import (
+    Fund,
+    NAVHistory,
+    Portfolio,
+    ReconciliationAuditItem,
+    ReconciliationAuditSnapshot,
+    Transaction,
+)
 from models.base import Base, TimestampMixin, utc_now
 
 
@@ -25,6 +32,8 @@ def test_expected_tables_are_registered() -> None:
         "portfolios",
         "transactions",
         "nav_history",
+        "reconciliation_audit_snapshots",
+        "reconciliation_audit_items",
     }
 
 
@@ -38,7 +47,14 @@ def test_utc_now_returns_timezone_aware_utc_datetime() -> None:
 
 def test_timestamp_mixin_columns_exist_on_models() -> None:
     """Every timestamp-enabled model must contain audit columns."""
-    for model in (Fund, Portfolio, Transaction, NAVHistory):
+    for model in (
+        Fund,
+        Portfolio,
+        Transaction,
+        NAVHistory,
+        ReconciliationAuditSnapshot,
+        ReconciliationAuditItem,
+    ):
         mapper = inspect(model)
 
         assert "created_at" in mapper.columns
@@ -47,7 +63,14 @@ def test_timestamp_mixin_columns_exist_on_models() -> None:
 
 def test_timestamp_columns_are_required_and_have_defaults() -> None:
     """Timestamp columns must be non-nullable and automatically populated."""
-    for model in (Fund, Portfolio, Transaction, NAVHistory):
+    for model in (
+        Fund,
+        Portfolio,
+        Transaction,
+        NAVHistory,
+        ReconciliationAuditSnapshot,
+        ReconciliationAuditItem,
+    ):
         mapper = inspect(model)
 
         created_at = mapper.columns["created_at"]
@@ -63,6 +86,13 @@ def test_timestamp_columns_are_required_and_have_defaults() -> None:
 
 def test_models_inherit_from_base_and_timestamp_mixin() -> None:
     """All domain models must inherit from the shared model classes."""
-    for model in (Fund, Portfolio, Transaction, NAVHistory):
+    for model in (
+        Fund,
+        Portfolio,
+        Transaction,
+        NAVHistory,
+        ReconciliationAuditSnapshot,
+        ReconciliationAuditItem,
+    ):
         assert issubclass(model, Base)
         assert issubclass(model, TimestampMixin)

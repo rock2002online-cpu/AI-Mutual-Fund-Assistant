@@ -7,6 +7,10 @@ from models.fund import Fund
 from models.nav_history import NAVHistory
 from models.portfolio import Portfolio
 from models.transaction import Transaction
+from models.reconciliation_audit import (
+    ReconciliationAuditItem,
+    ReconciliationAuditSnapshot,
+)
 
 __all__ = [
     "Base",
@@ -16,4 +20,6 @@ __all__ = [
     "Portfolio",
     "Transaction",
     "NAVHistory",
+    "ReconciliationAuditItem",
+    "ReconciliationAuditSnapshot",
 ]

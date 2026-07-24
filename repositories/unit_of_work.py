@@ -13,6 +13,9 @@ from repositories.fund_repository import FundRepository
 from repositories.portfolio_repository import PortfolioRepository
 from repositories.transaction_repository import TransactionRepository
 from repositories.nav_history_repository import NAVHistoryRepository
+from repositories.reconciliation_audit_repository import (
+    ReconciliationAuditRepository,
+)
 
 
 class UnitOfWork:
@@ -28,6 +31,9 @@ class UnitOfWork:
         self.portfolios: PortfolioRepository | None = None
         self.transactions: TransactionRepository | None = None
         self.nav_history: NAVHistoryRepository | None = None
+        self.reconciliation_audits: (
+            ReconciliationAuditRepository | None
+        ) = None
 
     def __enter__(self) -> "UnitOfWork":
         self.session = self._session_factory()
@@ -36,6 +42,11 @@ class UnitOfWork:
         self.portfolios = PortfolioRepository(self.session)
         self.transactions = TransactionRepository(self.session)
         self.nav_history = NAVHistoryRepository(self.session)
+        self.reconciliation_audits = (
+            ReconciliationAuditRepository(
+                self.session
+            )
+        )
 
         return self
 
