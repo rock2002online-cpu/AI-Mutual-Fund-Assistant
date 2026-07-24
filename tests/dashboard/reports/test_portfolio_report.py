@@ -63,7 +63,9 @@ from services.reporting.report_assets import (
     APPLICATION_NAME,
     DEFAULT_REPORT_TITLE,
 )
-
+from services.portfolio_reconciliation_service import (
+    PortfolioReconciliationResult,
+)
 
 # ============================================================
 # Test Doubles
@@ -119,6 +121,9 @@ class FakePortfolioReport:
         performance: FakePerformance,
         history: FakeHistory | None = None,
         advanced_analytics: FakeAdvancedAnalytics | None = None,
+        reconciliation: (
+            PortfolioReconciliationResult | None
+        ) = None,
         ai_summary: dict[str, object] | None = None,
         notes: tuple[str, ...] = (),
         warnings: tuple[str, ...] = (),
@@ -127,6 +132,7 @@ class FakePortfolioReport:
         self.performance = performance
         self.history = history
         self.advanced_analytics = advanced_analytics
+        self.reconciliation = reconciliation
         self.ai_summary = (
             {}
             if ai_summary is None
@@ -764,6 +770,22 @@ def test_build_portfolio_report_creates_expected_report(
         result.metadata.generated_at
         is generated_at
     )
+def test_build_portfolio_report_carries_reconciliation(
+    performance: FakePerformance,
+) -> None:
+    """Propagate precomputed reconciliation without recalculation."""
+
+    reconciliation = PortfolioReconciliationResult(
+        items=[],
+        is_reconciled=True,
+    )
+
+    result = build_portfolio_report(
+        performance,  # type: ignore[arg-type]
+        reconciliation=reconciliation,
+    )
+
+    assert result.reconciliation is reconciliation
 
 
 def test_build_portfolio_report_uses_defaults(
@@ -1282,16 +1304,31 @@ def test_build_portfolio_report_bundle_combines_report_and_downloads(
         "PortfolioReport",
         type(report),
     )
+    reconciliation = PortfolioReconciliationResult(
+        items=[],
+        is_reconciled=True,
+    )
 
     result = build_portfolio_report_bundle(
         performance,  # type: ignore[arg-type]
         pdf_filename="bundle.pdf",
         excel_filename="bundle.xlsx",
+        reconciliation=reconciliation,
     )
 
     assert result.report is report
     assert result.pdf is pdf_payload
     assert result.excel is excel_payload
+    build_call = (
+        portfolio_report_module
+        .build_portfolio_report
+        .call_args
+    )
+
+    assert (
+        build_call.kwargs["reconciliation"]
+        is reconciliation
+    )
 
 
 def test_portfolio_report_bundle_is_immutable(
