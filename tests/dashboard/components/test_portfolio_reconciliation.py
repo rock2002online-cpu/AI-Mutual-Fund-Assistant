@@ -252,3 +252,78 @@ def test_render_portfolio_reconciliation_provides_excel_download(
         ),
         key="download_reconciliation_workbook",
     )
+def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
+    """Generate and render alerts from the supplied reconciliation result."""
+
+    result = PortfolioReconciliationResult(
+        items=[],
+        is_reconciled=True,
+    )
+    expected_alerts = [
+        MagicMock(),
+    ]
+
+    with (
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.columns"
+        ) as mock_columns,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.dataframe"
+        ),
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.download_button"
+        ),
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "ReconciliationExcelReportService"
+        ) as mock_excel_service_class,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "ReconciliationAlertService",
+            create=True,
+        ) as mock_alert_service_class,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "render_reconciliation_alerts",
+            create=True,
+        ) as mock_render_alerts,
+    ):
+        mock_columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        (
+            mock_excel_service_class
+            .return_value
+            .prepare_download
+            .return_value
+        ) = (
+            b"PK-reconciliation-workbook",
+            "portfolio_reconciliation.xlsx",
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet",
+        )
+
+        alert_service = (
+            mock_alert_service_class.return_value
+        )
+        alert_service.build_alerts.return_value = (
+            expected_alerts
+        )
+
+        render_portfolio_reconciliation(
+            result
+        )
+
+    alert_service.build_alerts.assert_called_once_with(
+        result
+    )
+    mock_render_alerts.assert_called_once_with(
+        expected_alerts
+    )
