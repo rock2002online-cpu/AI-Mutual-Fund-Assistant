@@ -1,23 +1,20 @@
 """Tests for the portfolio reconciliation dashboard component."""
 
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
-from dashboard.components.portfolio_reconciliation import (
-    _build_reconciliation_dataframe,
-)
-from services.portfolio_reconciliation_service import (
-    PortfolioReconciliationItem,
-)
 from dashboard.components.portfolio_reconciliation import (
     _build_reconciliation_dataframe,
     render_portfolio_reconciliation,
 )
-from unittest.mock import MagicMock, patch
-
+from models.reconciliation_audit import (
+    ReconciliationAuditSnapshot,
+)
 from services.portfolio_reconciliation_service import (
     PortfolioReconciliationItem,
     PortfolioReconciliationResult,
 )
+
 
 def test_build_reconciliation_dataframe_creates_display_rows() -> None:
     """Convert reconciliation items into dashboard-ready rows."""
@@ -53,6 +50,8 @@ def test_build_reconciliation_dataframe_creates_display_rows() -> None:
             "Status": "Matched",
         }
     ]
+
+
 @patch(
     "dashboard.components.portfolio_reconciliation.st.columns"
 )
@@ -124,6 +123,8 @@ def test_render_portfolio_reconciliation_displays_summary_metrics(
             "reconciliation status."
         ),
     )
+
+
 @patch(
     "dashboard.components.portfolio_reconciliation.st.dataframe"
 )
@@ -188,13 +189,14 @@ def test_render_portfolio_reconciliation_displays_detail_table(
         "width": "stretch",
         "hide_index": True,
     }
+
+
 @patch(
     "dashboard.components.portfolio_reconciliation.st.download_button"
 )
 @patch(
     "dashboard.components.portfolio_reconciliation."
-    "ReconciliationExcelReportService",
-    create=True,
+    "ReconciliationExcelReportService"
 )
 @patch(
     "dashboard.components.portfolio_reconciliation.st.dataframe"
@@ -252,15 +254,24 @@ def test_render_portfolio_reconciliation_provides_excel_download(
         ),
         key="download_reconciliation_workbook",
     )
+
+
 def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
-    """Generate and render alerts from the supplied reconciliation result."""
+    """Render current alerts and persisted reconciliation history."""
 
     result = PortfolioReconciliationResult(
         items=[],
         is_reconciled=True,
     )
+
     expected_alerts = [
         MagicMock(),
+    ]
+
+    audit_history = [
+        MagicMock(
+            spec=ReconciliationAuditSnapshot,
+        ),
     ]
 
     with (
@@ -282,14 +293,17 @@ def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
         ) as mock_excel_service_class,
         patch(
             "dashboard.components.portfolio_reconciliation."
-            "ReconciliationAlertService",
-            create=True,
+            "ReconciliationAlertService"
         ) as mock_alert_service_class,
         patch(
             "dashboard.components.portfolio_reconciliation."
-            "render_reconciliation_alerts",
-            create=True,
+            "render_reconciliation_alerts"
         ) as mock_render_alerts,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "render_reconciliation_audit_history",
+            create=True,
+        ) as mock_render_audit_history,
     ):
         mock_columns.return_value = (
             MagicMock(),
@@ -306,8 +320,10 @@ def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
         ) = (
             b"PK-reconciliation-workbook",
             "portfolio_reconciliation.xlsx",
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet",
+            (
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
         )
 
         alert_service = (
@@ -318,7 +334,8 @@ def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
         )
 
         render_portfolio_reconciliation(
-            result
+            result,
+            audit_history=audit_history,
         )
 
     alert_service.build_alerts.assert_called_once_with(
@@ -326,4 +343,7 @@ def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
     )
     mock_render_alerts.assert_called_once_with(
         expected_alerts
+    )
+    mock_render_audit_history.assert_called_once_with(
+        audit_history
     )

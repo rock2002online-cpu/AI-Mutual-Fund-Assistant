@@ -22,6 +22,12 @@ from dashboard.components.reconciliation_alerts import (
 from services.reconciliation_alert_service import (
     ReconciliationAlertService,
 )
+from dashboard.components.reconciliation_audit_history import (
+    render_reconciliation_audit_history,
+)
+from models.reconciliation_audit import (
+    ReconciliationAuditSnapshot,
+)
 _RECONCILIATION_COLUMNS = [
     "Portfolio ID",
     "Fund ID",
@@ -84,6 +90,10 @@ __all__ = [
 ]
 def render_portfolio_reconciliation(
     result: PortfolioReconciliationResult,
+    *,
+    audit_history: Sequence[
+        ReconciliationAuditSnapshot
+    ] = (),
 ) -> None:
     """Render portfolio reconciliation summary metrics."""
 
@@ -135,6 +145,10 @@ def render_portfolio_reconciliation(
     render_reconciliation_alerts(
         alerts
     )
+    if audit_history:
+        render_reconciliation_audit_history(
+            audit_history
+        )
     st.dataframe(
         _build_reconciliation_dataframe(
             result.items
