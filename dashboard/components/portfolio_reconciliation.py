@@ -16,6 +16,12 @@ from services.portfolio_reconciliation_service import (
 from services.reporting.reconciliation_excel_report_service import (
     ReconciliationExcelReportService,
 )
+from dashboard.components.reconciliation_alerts import (
+    render_reconciliation_alerts,
+)
+from services.reconciliation_alert_service import (
+    ReconciliationAlertService,
+)
 _RECONCILIATION_COLUMNS = [
     "Portfolio ID",
     "Fund ID",
@@ -118,6 +124,16 @@ def render_portfolio_reconciliation(
             "Informational only; unit balances determine "
             "reconciliation status."
         ),
+    )
+    alerts = (
+        ReconciliationAlertService()
+        .build_alerts(
+            result
+        )
+    )
+
+    render_reconciliation_alerts(
+        alerts
     )
     st.dataframe(
         _build_reconciliation_dataframe(
