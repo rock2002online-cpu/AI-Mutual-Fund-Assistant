@@ -28,6 +28,12 @@ from dashboard.components.reconciliation_audit_history import (
 from models.reconciliation_audit import (
     ReconciliationAuditSnapshot,
 )
+from dashboard.components.reconciliation_exceptions import (
+    render_reconciliation_exceptions,
+)
+from models.reconciliation_exception import (
+    ReconciliationException,
+)
 _RECONCILIATION_COLUMNS = [
     "Portfolio ID",
     "Fund ID",
@@ -94,6 +100,9 @@ def render_portfolio_reconciliation(
     audit_history: Sequence[
         ReconciliationAuditSnapshot
     ] = (),
+    active_exceptions: Sequence[
+        ReconciliationException
+    ] | None = None,
 ) -> None:
     """Render portfolio reconciliation summary metrics."""
 
@@ -145,6 +154,10 @@ def render_portfolio_reconciliation(
     render_reconciliation_alerts(
         alerts
     )
+    if active_exceptions is not None:
+        render_reconciliation_exceptions(
+            active_exceptions
+        )
     if audit_history:
         render_reconciliation_audit_history(
             audit_history

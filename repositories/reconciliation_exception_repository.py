@@ -13,6 +13,12 @@ from repositories.base_repository import (
 )
 
 
+ACTIVE_EXCEPTION_STATUSES = (
+    "open",
+    "investigating",
+)
+
+
 class ReconciliationExceptionRepository(
     BaseRepository[ReconciliationException]
 ):
@@ -77,7 +83,35 @@ class ReconciliationExceptionRepository(
             )
         )
 
+    def get_active_for_portfolio(
+        self,
+        portfolio_id: int,
+    ) -> list[ReconciliationException]:
+        """Return unresolved portfolio exceptions newest first."""
+
+        statement = (
+            select(ReconciliationException)
+            .where(
+                ReconciliationException.portfolio_id
+                == portfolio_id,
+                ReconciliationException.status.in_(
+                    ACTIVE_EXCEPTION_STATUSES
+                ),
+            )
+            .order_by(
+                ReconciliationException.opened_at.desc(),
+                ReconciliationException.id.desc(),
+            )
+        )
+
+        return list(
+            self.session.scalars(
+                statement
+            )
+        )
+
 
 __all__ = [
+    "ACTIVE_EXCEPTION_STATUSES",
     "ReconciliationExceptionRepository",
 ]

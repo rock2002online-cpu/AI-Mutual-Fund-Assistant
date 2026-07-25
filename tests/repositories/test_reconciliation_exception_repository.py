@@ -251,3 +251,12 @@ def test_get_for_portfolio_filters_by_status(
     assert results == [
         open_exception,
     ]
+    active_results = (
+        repository.get_active_for_portfolio(
+            portfolio.id
+        )
+    )
+
+    assert active_results == [
+        open_exception,
+    ]
