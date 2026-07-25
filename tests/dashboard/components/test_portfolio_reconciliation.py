@@ -14,7 +14,9 @@ from services.portfolio_reconciliation_service import (
     PortfolioReconciliationItem,
     PortfolioReconciliationResult,
 )
-
+from models.reconciliation_exception import (
+    ReconciliationException,
+)
 
 def test_build_reconciliation_dataframe_creates_display_rows() -> None:
     """Convert reconciliation items into dashboard-ready rows."""
@@ -346,4 +348,69 @@ def test_render_portfolio_reconciliation_renders_generated_alerts() -> None:
     )
     mock_render_audit_history.assert_called_once_with(
         audit_history
+    )
+def test_render_portfolio_reconciliation_renders_exception_queue() -> None:
+    """Render active reconciliation exceptions when supplied."""
+
+    result = PortfolioReconciliationResult(
+        items=[],
+        is_reconciled=True,
+    )
+    active_exceptions = [
+        MagicMock(
+            spec=ReconciliationException,
+        ),
+    ]
+
+    with (
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.columns"
+        ) as mock_columns,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.dataframe"
+        ),
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "st.download_button"
+        ),
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "ReconciliationExcelReportService"
+        ) as mock_excel_service_class,
+        patch(
+            "dashboard.components.portfolio_reconciliation."
+            "render_reconciliation_exceptions",
+            create=True,
+        ) as mock_render_exceptions,
+    ):
+        mock_columns.return_value = (
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        )
+
+        (
+            mock_excel_service_class
+            .return_value
+            .prepare_download
+            .return_value
+        ) = (
+            b"PK-reconciliation-workbook",
+            "portfolio_reconciliation.xlsx",
+            (
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+        )
+
+        render_portfolio_reconciliation(
+            result,
+            active_exceptions=active_exceptions,
+        )
+
+    mock_render_exceptions.assert_called_once_with(
+        active_exceptions
     )

@@ -16,6 +16,9 @@ from services.portfolio_reconciliation_service import (
 from services.reconciliation_audit_service import (
     ReconciliationAuditService,
 )
+from services.reconciliation_exception_service import (
+    ReconciliationExceptionService,
+)
 
 
 class ReconciliationAuditRecordingService:
@@ -26,9 +29,15 @@ class ReconciliationAuditRecordingService:
         *,
         audit_service: ReconciliationAuditService,
         repository: ReconciliationAuditRepository,
+        exception_service: (
+            ReconciliationExceptionService | None
+        ) = None,
     ) -> None:
         self._audit_service = audit_service
         self._repository = repository
+        self._exception_service = (
+            exception_service
+        )
 
     def record_snapshot(
         self,
@@ -47,9 +56,17 @@ class ReconciliationAuditRecordingService:
             )
         )
 
-        return self._repository.add(
+        saved = self._repository.add(
             snapshot
         )
+
+        if self._exception_service is not None:
+            self._exception_service.open_for_snapshot(
+                snapshot=saved,
+                opened_at=recorded_at,
+            )
+
+        return saved
 
 
 __all__ = [
