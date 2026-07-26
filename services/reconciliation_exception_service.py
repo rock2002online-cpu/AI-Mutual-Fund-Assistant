@@ -210,6 +210,46 @@ class ReconciliationExceptionService:
             )
 
         return updated
+    def escalate(
+        self,
+        *,
+        exception_id: int,
+        escalated_at: datetime,
+        reason: str,
+    ) -> ReconciliationException:
+        """Escalate an active exception to high priority."""
+
+        if not reason.strip():
+            raise ReconciliationExceptionValidationError(
+                "reason cannot be empty."
+            )
+
+        exception = self._repository.get_by_id(
+            exception_id
+        )
+
+        if exception.status == "resolved":
+            raise ReconciliationExceptionValidationError(
+                "resolved exceptions cannot be escalated."
+            )
+
+        if exception.assigned_to is None:
+            raise ReconciliationExceptionValidationError(
+                "unassigned exceptions cannot be escalated."
+            )
+
+        if exception.escalated_at is not None:
+            raise ReconciliationExceptionValidationError(
+                "exception is already escalated."
+            )
+
+        exception.priority = "high"
+        exception.escalated_at = escalated_at
+        exception.escalation_reason = reason
+
+        return self._repository.update(
+            exception
+        )
     def start_investigation(
         self,
         *,

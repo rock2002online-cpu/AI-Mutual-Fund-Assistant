@@ -1318,3 +1318,325 @@ def test_reassign_rejects_resolved_exception() -> None:
     assert exception.assigned_at == original_assigned_at
     repository.update.assert_not_called()
     assignment_repository.add.assert_not_called()
+def test_escalate_marks_active_exception_as_high_priority() -> None:
+    """An active assigned exception should be escalated."""
+
+    escalated_at = datetime(
+        2026,
+        7,
+        26,
+        15,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=64,
+        audit_item_id=37,
+        portfolio_id=57,
+        fund_id=47,
+        exception_type="unit_mismatch",
+        status="investigating",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+    repository.update.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    updated = service.escalate(
+        exception_id=exception.id,
+        escalated_at=escalated_at,
+        reason="The exception exceeded its investigation SLA.",
+    )
+
+    assert updated is exception
+    assert exception.status == "investigating"
+    assert exception.priority == "high"
+    assert exception.escalated_at == escalated_at
+    assert exception.escalation_reason == (
+        "The exception exceeded its investigation SLA."
+    )
+
+    repository.get_by_id.assert_called_once_with(
+        exception.id
+    )
+    repository.update.assert_called_once_with(
+        exception
+    )
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_escalate_requires_reason(
+    reason: str,
+) -> None:
+    """Escalation should require an audit explanation."""
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="reason cannot be empty",
+    ):
+        service.escalate(
+            exception_id=64,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                15,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason=reason,
+        )
+
+    repository.get_by_id.assert_not_called()
+    repository.update.assert_not_called()
+def test_escalate_rejects_unassigned_exception() -> None:
+    """An unassigned exception must not be escalated."""
+
+    exception = ReconciliationException(
+        id=65,
+        audit_item_id=38,
+        portfolio_id=58,
+        fund_id=48,
+        exception_type="missing_position",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unassigned exceptions cannot be escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                16,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="The exception exceeded its response SLA.",
+        )
+
+    assert exception.priority is None
+    assert exception.escalated_at is None
+    assert exception.escalation_reason is None
+    repository.update.assert_not_called()
+def test_escalate_rejects_resolved_exception() -> None:
+    """A resolved exception must not be escalated."""
+
+    exception = ReconciliationException(
+        id=66,
+        audit_item_id=39,
+        portfolio_id=59,
+        fund_id=49,
+        exception_type="unit_mismatch",
+        status="resolved",
+        priority="normal",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+        resolved_at=datetime(
+            2026,
+            7,
+            26,
+            14,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        resolution_notes="The discrepancy was corrected.",
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="resolved exceptions cannot be escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                16,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted escalation after resolution.",
+        )
+
+    assert exception.priority == "normal"
+    assert exception.escalated_at is None
+    assert exception.escalation_reason is None
+    repository.update.assert_not_called()
+def test_escalate_rejects_already_escalated_exception() -> None:
+    """An already escalated exception must not be escalated again."""
+
+    original_escalated_at = datetime(
+        2026,
+        7,
+        26,
+        15,
+        0,
+        tzinfo=timezone.utc,
+    )
+    original_reason = (
+        "The exception exceeded its investigation SLA."
+    )
+    exception = ReconciliationException(
+        id=67,
+        audit_item_id=40,
+        portfolio_id=60,
+        fund_id=50,
+        exception_type="missing_tax_lots",
+        status="investigating",
+        priority="high",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+        escalated_at=original_escalated_at,
+        escalation_reason=original_reason,
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="exception is already escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                17,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted duplicate escalation.",
+        )
+
+    assert exception.priority == "high"
+    assert exception.escalated_at == original_escalated_at
+    assert exception.escalation_reason == original_reason
+    repository.update.assert_not_called()
