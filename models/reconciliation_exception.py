@@ -83,6 +83,21 @@ class ReconciliationException(
         index=True,
     )
 
+    assigned_to: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True,
+    )
+
+    assigned_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     investigation_started_at: Mapped[
         datetime | None
     ] = mapped_column(

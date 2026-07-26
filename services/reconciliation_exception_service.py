@@ -10,6 +10,12 @@ from models.reconciliation_audit import (
 from models.reconciliation_exception import (
     ReconciliationException,
 )
+from models.reconciliation_exception_assignment import (
+    ReconciliationExceptionAssignment,
+)
+from repositories.reconciliation_exception_assignment_repository import (
+    ReconciliationExceptionAssignmentRepository,
+)
 from repositories.reconciliation_exception_repository import (
     ReconciliationExceptionRepository,
 )
@@ -37,8 +43,15 @@ class ReconciliationExceptionService:
         self,
         *,
         repository: ReconciliationExceptionRepository,
+        assignment_repository: (
+            ReconciliationExceptionAssignmentRepository
+            | None
+        ) = None,
     ) -> None:
         self._repository = repository
+        self._assignment_repository = (
+            assignment_repository
+        )
 
     def open_for_snapshot(
         self,
@@ -86,6 +99,117 @@ class ReconciliationExceptionService:
 
         return created
 
+    def assign(
+        self,
+        *,
+        exception_id: int,
+        assigned_to: str,
+        assigned_at: datetime,
+    ) -> ReconciliationException:
+        """Assign an unassigned exception to an operational owner."""
+
+        if not assigned_to.strip():
+            raise ReconciliationExceptionValidationError(
+                "assigned_to cannot be empty."
+            )
+
+        exception = self._repository.get_by_id(
+            exception_id
+        )
+
+        if exception.status == "resolved":
+            raise ReconciliationExceptionValidationError(
+                "resolved exceptions cannot be assigned."
+            )
+
+        if exception.assigned_to is not None:
+            raise ReconciliationExceptionValidationError(
+                "exception is already assigned."
+            )
+
+        exception.assigned_to = assigned_to
+        exception.assigned_at = assigned_at
+
+        updated = self._repository.update(
+            exception
+        )
+
+        if self._assignment_repository is not None:
+            self._assignment_repository.add(
+                ReconciliationExceptionAssignment(
+                    exception_id=exception.id,
+                    previous_assigned_to=None,
+                    assigned_to=assigned_to,
+                    assigned_at=assigned_at,
+                    reason=None,
+                )
+            )
+
+        return updated
+    def reassign(
+        self,
+        *,
+        exception_id: int,
+        assigned_to: str,
+        reassigned_at: datetime,
+        reason: str,
+    ) -> ReconciliationException:
+        """Transfer ownership and preserve assignment history."""
+
+        if not assigned_to.strip():
+            raise ReconciliationExceptionValidationError(
+                "assigned_to cannot be empty."
+            )
+
+        if not reason.strip():
+            raise ReconciliationExceptionValidationError(
+                "reason cannot be empty."
+            )
+
+        exception = self._repository.get_by_id(
+            exception_id
+        )
+
+        if exception.status == "resolved":
+            raise ReconciliationExceptionValidationError(
+                "resolved exceptions cannot be reassigned."
+            )
+
+        if exception.assigned_to is None:
+            raise ReconciliationExceptionValidationError(
+                "exception is not currently assigned."
+            )
+
+        if exception.assigned_to == assigned_to:
+            raise ReconciliationExceptionValidationError(
+                "new owner must be different."
+            )
+
+        previous_assigned_to = (
+            exception.assigned_to
+        )
+
+        exception.assigned_to = assigned_to
+        exception.assigned_at = reassigned_at
+
+        updated = self._repository.update(
+            exception
+        )
+
+        if self._assignment_repository is not None:
+            self._assignment_repository.add(
+                ReconciliationExceptionAssignment(
+                    exception_id=exception.id,
+                    previous_assigned_to=(
+                        previous_assigned_to
+                    ),
+                    assigned_to=assigned_to,
+                    assigned_at=reassigned_at,
+                    reason=reason,
+                )
+            )
+
+        return updated
     def start_investigation(
         self,
         *,
