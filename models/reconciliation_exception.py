@@ -75,12 +75,47 @@ class ReconciliationException(
         default="open",
         index=True,
     )
+    priority: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="normal",
+        server_default="normal",
+        index=True,
+    )
 
     opened_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utc_now,
         index=True,
+    )
+
+    assigned_to: Mapped[
+        str | None
+    ] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True,
+    )
+
+    assigned_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    escalated_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    escalation_reason: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     investigation_started_at: Mapped[

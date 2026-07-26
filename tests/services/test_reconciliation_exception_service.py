@@ -17,7 +17,9 @@ from services.reconciliation_exception_service import (
 from models.reconciliation_exception import (
     ReconciliationException,
 )
-
+from repositories.reconciliation_exception_assignment_repository import (
+    ReconciliationExceptionAssignmentRepository,
+)
 
 def test_open_for_snapshot_creates_unit_mismatch_exception() -> None:
     """A unit mismatch should create an actionable exception."""
@@ -615,4 +617,1026 @@ def test_resolve_requires_resolution_notes(
     assert exception.status == "investigating"
     assert exception.resolved_at is None
     assert exception.resolution_notes is None
+    repository.update.assert_not_called()
+def test_assign_sets_owner_on_open_exception() -> None:
+    """An open exception should be assignable to an operational owner."""
+
+    assigned_at = datetime(
+        2026,
+        7,
+        25,
+        18,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=55,
+        audit_item_id=28,
+        portfolio_id=48,
+        fund_id=38,
+        exception_type="unit_mismatch",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            25,
+            13,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+    repository.update.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    updated = service.assign(
+        exception_id=exception.id,
+        assigned_to="operations-team",
+        assigned_at=assigned_at,
+    )
+
+    assert updated is exception
+    assert exception.status == "open"
+    assert exception.assigned_to == "operations-team"
+    assert exception.assigned_at == assigned_at
+
+    repository.get_by_id.assert_called_once_with(
+        exception.id
+    )
+    repository.update.assert_called_once_with(
+        exception
+    )
+@pytest.mark.parametrize(
+    "assigned_to",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_assign_requires_operational_owner(
+    assigned_to: str,
+) -> None:
+    """Assignment should require a meaningful owner."""
+
+    exception = ReconciliationException(
+        id=56,
+        audit_item_id=29,
+        portfolio_id=49,
+        fund_id=39,
+        exception_type="missing_tax_lots",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            25,
+            13,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="assigned_to cannot be empty",
+    ):
+        service.assign(
+            exception_id=exception.id,
+            assigned_to=assigned_to,
+            assigned_at=datetime(
+                2026,
+                7,
+                25,
+                18,
+                30,
+                tzinfo=timezone.utc,
+            ),
+        )
+
+    assert exception.assigned_to is None
+    assert exception.assigned_at is None
+    repository.update.assert_not_called()
+def test_assign_rejects_resolved_exception() -> None:
+    """A resolved exception must not receive a new assignment."""
+
+    exception = ReconciliationException(
+        id=57,
+        audit_item_id=30,
+        portfolio_id=50,
+        fund_id=40,
+        exception_type="unit_mismatch",
+        status="resolved",
+        opened_at=datetime(
+            2026,
+            7,
+            25,
+            13,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            25,
+            14,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        resolved_at=datetime(
+            2026,
+            7,
+            25,
+            17,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        resolution_notes=(
+            "The unit discrepancy was corrected."
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="resolved exceptions cannot be assigned",
+    ):
+        service.assign(
+            exception_id=exception.id,
+            assigned_to="operations-team",
+            assigned_at=datetime(
+                2026,
+                7,
+                25,
+                18,
+                45,
+                tzinfo=timezone.utc,
+            ),
+        )
+
+    assert exception.assigned_to is None
+    assert exception.assigned_at is None
+    repository.update.assert_not_called()
+def test_assign_rejects_already_assigned_exception() -> None:
+    """Initial assignment must not silently replace an owner."""
+
+    original_assigned_at = datetime(
+        2026,
+        7,
+        25,
+        18,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=58,
+        audit_item_id=31,
+        portfolio_id=51,
+        fund_id=41,
+        exception_type="missing_position",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            25,
+            13,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=original_assigned_at,
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="exception is already assigned",
+    ):
+        service.assign(
+            exception_id=exception.id,
+            assigned_to="reconciliation-manager",
+            assigned_at=datetime(
+                2026,
+                7,
+                25,
+                19,
+                0,
+                tzinfo=timezone.utc,
+            ),
+        )
+
+    assert exception.assigned_to == "operations-team"
+    assert exception.assigned_at == original_assigned_at
+    repository.update.assert_not_called()
+def test_assign_records_immutable_assignment_history() -> None:
+    """Initial ownership should create an immutable history record."""
+
+    assigned_at = datetime(
+        2026,
+        7,
+        26,
+        11,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=59,
+        audit_item_id=32,
+        portfolio_id=52,
+        fund_id=42,
+        exception_type="unit_mismatch",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+    repository.update.return_value = exception
+
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+    assignment_repository.add.side_effect = (
+        lambda assignment: assignment
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    updated = service.assign(
+        exception_id=exception.id,
+        assigned_to="operations-team",
+        assigned_at=assigned_at,
+    )
+
+    assert updated is exception
+
+    assignment_repository.add.assert_called_once()
+
+    assignment = (
+        assignment_repository.add.call_args.args[0]
+    )
+
+    assert assignment.exception_id == exception.id
+    assert assignment.previous_assigned_to is None
+    assert assignment.assigned_to == "operations-team"
+    assert assignment.assigned_at == assigned_at
+    assert assignment.reason is None
+def test_reassign_changes_owner_and_records_history() -> None:
+    """Controlled reassignment should preserve the ownership change."""
+
+    original_assigned_at = datetime(
+        2026,
+        7,
+        26,
+        10,
+        0,
+        tzinfo=timezone.utc,
+    )
+    reassigned_at = datetime(
+        2026,
+        7,
+        26,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=60,
+        audit_item_id=33,
+        portfolio_id=53,
+        fund_id=43,
+        exception_type="missing_position",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=original_assigned_at,
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+    repository.update.return_value = exception
+
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+    assignment_repository.add.side_effect = (
+        lambda assignment: assignment
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    updated = service.reassign(
+        exception_id=exception.id,
+        assigned_to="reconciliation-manager",
+        reassigned_at=reassigned_at,
+        reason="Escalated for supervisory review.",
+    )
+
+    assert updated is exception
+    assert (
+        exception.assigned_to
+        == "reconciliation-manager"
+    )
+    assert exception.assigned_at == reassigned_at
+
+    repository.update.assert_called_once_with(
+        exception
+    )
+    assignment_repository.add.assert_called_once()
+
+    assignment = (
+        assignment_repository.add.call_args.args[0]
+    )
+
+    assert assignment.exception_id == exception.id
+    assert (
+        assignment.previous_assigned_to
+        == "operations-team"
+    )
+    assert (
+        assignment.assigned_to
+        == "reconciliation-manager"
+    )
+    assert assignment.assigned_at == reassigned_at
+    assert assignment.reason == (
+        "Escalated for supervisory review."
+    )
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_reassign_requires_reason(
+    reason: str,
+) -> None:
+    """Reassignment should require an audit explanation."""
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="reason cannot be empty",
+    ):
+        service.reassign(
+            exception_id=60,
+            assigned_to="reconciliation-manager",
+            reassigned_at=datetime(
+                2026,
+                7,
+                26,
+                12,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason=reason,
+        )
+
+    repository.get_by_id.assert_not_called()
+    repository.update.assert_not_called()
+    assignment_repository.add.assert_not_called()
+@pytest.mark.parametrize(
+    "assigned_to",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_reassign_requires_operational_owner(
+    assigned_to: str,
+) -> None:
+    """Reassignment should require a meaningful destination owner."""
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="assigned_to cannot be empty",
+    ):
+        service.reassign(
+            exception_id=60,
+            assigned_to=assigned_to,
+            reassigned_at=datetime(
+                2026,
+                7,
+                26,
+                13,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="Transferred to the specialist team.",
+        )
+
+    repository.get_by_id.assert_not_called()
+    repository.update.assert_not_called()
+    assignment_repository.add.assert_not_called()
+def test_reassign_rejects_unassigned_exception() -> None:
+    """An unassigned exception must use initial assignment."""
+
+    exception = ReconciliationException(
+        id=61,
+        audit_item_id=34,
+        portfolio_id=54,
+        fund_id=44,
+        exception_type="unit_mismatch",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="exception is not currently assigned",
+    ):
+        service.reassign(
+            exception_id=exception.id,
+            assigned_to="reconciliation-manager",
+            reassigned_at=datetime(
+                2026,
+                7,
+                26,
+                13,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason="Transferred for specialist review.",
+        )
+
+    assert exception.assigned_to is None
+    assert exception.assigned_at is None
+    repository.update.assert_not_called()
+    assignment_repository.add.assert_not_called()
+def test_reassign_rejects_same_owner() -> None:
+    """Reassignment must transfer ownership to a different owner."""
+
+    original_assigned_at = datetime(
+        2026,
+        7,
+        26,
+        10,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=62,
+        audit_item_id=35,
+        portfolio_id=55,
+        fund_id=45,
+        exception_type="missing_tax_lots",
+        status="investigating",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=original_assigned_at,
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="new owner must be different",
+    ):
+        service.reassign(
+            exception_id=exception.id,
+            assigned_to="operations-team",
+            reassigned_at=datetime(
+                2026,
+                7,
+                26,
+                14,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted duplicate ownership transfer.",
+        )
+
+    assert exception.assigned_to == "operations-team"
+    assert exception.assigned_at == original_assigned_at
+    repository.update.assert_not_called()
+    assignment_repository.add.assert_not_called()
+def test_reassign_rejects_resolved_exception() -> None:
+    """A resolved exception must not be reassigned."""
+
+    original_assigned_at = datetime(
+        2026,
+        7,
+        26,
+        10,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=63,
+        audit_item_id=36,
+        portfolio_id=56,
+        fund_id=46,
+        exception_type="unit_mismatch",
+        status="resolved",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=original_assigned_at,
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+        resolved_at=datetime(
+            2026,
+            7,
+            26,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        resolution_notes="The unit discrepancy was corrected.",
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    assignment_repository = Mock(
+        spec=ReconciliationExceptionAssignmentRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+        assignment_repository=assignment_repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="resolved exceptions cannot be reassigned",
+    ):
+        service.reassign(
+            exception_id=exception.id,
+            assigned_to="reconciliation-manager",
+            reassigned_at=datetime(
+                2026,
+                7,
+                26,
+                14,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted transfer after resolution.",
+        )
+
+    assert exception.assigned_to == "operations-team"
+    assert exception.assigned_at == original_assigned_at
+    repository.update.assert_not_called()
+    assignment_repository.add.assert_not_called()
+def test_escalate_marks_active_exception_as_high_priority() -> None:
+    """An active assigned exception should be escalated."""
+
+    escalated_at = datetime(
+        2026,
+        7,
+        26,
+        15,
+        0,
+        tzinfo=timezone.utc,
+    )
+    exception = ReconciliationException(
+        id=64,
+        audit_item_id=37,
+        portfolio_id=57,
+        fund_id=47,
+        exception_type="unit_mismatch",
+        status="investigating",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+    repository.update.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    updated = service.escalate(
+        exception_id=exception.id,
+        escalated_at=escalated_at,
+        reason="The exception exceeded its investigation SLA.",
+    )
+
+    assert updated is exception
+    assert exception.status == "investigating"
+    assert exception.priority == "high"
+    assert exception.escalated_at == escalated_at
+    assert exception.escalation_reason == (
+        "The exception exceeded its investigation SLA."
+    )
+
+    repository.get_by_id.assert_called_once_with(
+        exception.id
+    )
+    repository.update.assert_called_once_with(
+        exception
+    )
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "",
+        "   ",
+    ],
+)
+def test_escalate_requires_reason(
+    reason: str,
+) -> None:
+    """Escalation should require an audit explanation."""
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="reason cannot be empty",
+    ):
+        service.escalate(
+            exception_id=64,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                15,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason=reason,
+        )
+
+    repository.get_by_id.assert_not_called()
+    repository.update.assert_not_called()
+def test_escalate_rejects_unassigned_exception() -> None:
+    """An unassigned exception must not be escalated."""
+
+    exception = ReconciliationException(
+        id=65,
+        audit_item_id=38,
+        portfolio_id=58,
+        fund_id=48,
+        exception_type="missing_position",
+        status="open",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unassigned exceptions cannot be escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                16,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="The exception exceeded its response SLA.",
+        )
+
+    assert exception.priority is None
+    assert exception.escalated_at is None
+    assert exception.escalation_reason is None
+    repository.update.assert_not_called()
+def test_escalate_rejects_resolved_exception() -> None:
+    """A resolved exception must not be escalated."""
+
+    exception = ReconciliationException(
+        id=66,
+        audit_item_id=39,
+        portfolio_id=59,
+        fund_id=49,
+        exception_type="unit_mismatch",
+        status="resolved",
+        priority="normal",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+        resolved_at=datetime(
+            2026,
+            7,
+            26,
+            14,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        resolution_notes="The discrepancy was corrected.",
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="resolved exceptions cannot be escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                16,
+                30,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted escalation after resolution.",
+        )
+
+    assert exception.priority == "normal"
+    assert exception.escalated_at is None
+    assert exception.escalation_reason is None
+    repository.update.assert_not_called()
+def test_escalate_rejects_already_escalated_exception() -> None:
+    """An already escalated exception must not be escalated again."""
+
+    original_escalated_at = datetime(
+        2026,
+        7,
+        26,
+        15,
+        0,
+        tzinfo=timezone.utc,
+    )
+    original_reason = (
+        "The exception exceeded its investigation SLA."
+    )
+    exception = ReconciliationException(
+        id=67,
+        audit_item_id=40,
+        portfolio_id=60,
+        fund_id=50,
+        exception_type="missing_tax_lots",
+        status="investigating",
+        priority="high",
+        opened_at=datetime(
+            2026,
+            7,
+            26,
+            9,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        assigned_to="operations-team",
+        assigned_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        investigation_started_at=datetime(
+            2026,
+            7,
+            26,
+            10,
+            30,
+            tzinfo=timezone.utc,
+        ),
+        escalated_at=original_escalated_at,
+        escalation_reason=original_reason,
+    )
+
+    repository = Mock(
+        spec=ReconciliationExceptionRepository,
+    )
+    repository.get_by_id.return_value = exception
+
+    service = ReconciliationExceptionService(
+        repository=repository,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="exception is already escalated",
+    ):
+        service.escalate(
+            exception_id=exception.id,
+            escalated_at=datetime(
+                2026,
+                7,
+                26,
+                17,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            reason="Attempted duplicate escalation.",
+        )
+
+    assert exception.priority == "high"
+    assert exception.escalated_at == original_escalated_at
+    assert exception.escalation_reason == original_reason
     repository.update.assert_not_called()

@@ -12,7 +12,7 @@ from models.reconciliation_exception import (
 
 
 def test_reconciliation_exception_schema() -> None:
-    """Exceptions should preserve evidence and lifecycle state."""
+    """Exceptions should preserve evidence, ownership, and lifecycle state."""
 
     assert (
         ReconciliationException.__tablename__
@@ -33,7 +33,12 @@ def test_reconciliation_exception_schema() -> None:
         "fund_id",
         "exception_type",
         "status",
+        "priority",
         "opened_at",
+        "assigned_to",
+        "assigned_at",
+        "escalated_at",
+        "escalation_reason",
         "investigation_started_at",
         "resolved_at",
         "resolution_notes",

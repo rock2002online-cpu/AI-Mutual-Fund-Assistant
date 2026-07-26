@@ -17,6 +17,9 @@ from models.reconciliation_audit import (
 from models.reconciliation_exception import (
     ReconciliationException,
 )
+from models.reconciliation_exception_assignment import (
+    ReconciliationExceptionAssignment,
+)
 from models.transaction import Transaction
 
 
@@ -31,4 +34,5 @@ __all__ = [
     "ReconciliationAuditItem",
     "ReconciliationAuditSnapshot",
     "ReconciliationException",
+    "ReconciliationExceptionAssignment",
 ]
