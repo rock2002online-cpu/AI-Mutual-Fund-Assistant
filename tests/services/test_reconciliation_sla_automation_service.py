@@ -16,7 +16,14 @@ from services.reconciliation_sla_monitoring_service import (
     ReconciliationSLAMonitoringResult,
     ReconciliationSLAMonitoringService,
 )
+from unittest.mock import ANY
 
+from models.reconciliation_sla_audit import (
+    ReconciliationSLAAudit,
+)
+from services.reconciliation_sla_audit_service import (
+    ReconciliationSLAAuditService,
+)
 
 def create_exception(
     *,
@@ -174,4 +181,83 @@ def test_run_portfolio_returns_empty_result_without_breaches(
     escalation_service.escalate.assert_called_once_with(
         monitoring_result=monitoring_result,
         escalated_at=as_of,
+    )
+def test_run_portfolio_persists_sla_audit(
+) -> None:
+    """An automated portfolio run should persist its audit summary."""
+
+    as_of = datetime(
+        2026,
+        7,
+        27,
+        18,
+        0,
+        tzinfo=timezone.utc,
+    )
+    monitoring_result = ReconciliationSLAMonitoringResult(
+        as_of=as_of,
+        assignment_breaches=[],
+        investigation_breaches=[],
+        resolution_breaches=[],
+    )
+    audit = ReconciliationSLAAudit(
+        id=1,
+        portfolio_id=903,
+        monitored_at=as_of,
+        assignment_breach_count=0,
+        investigation_breach_count=0,
+        resolution_breach_count=0,
+        escalated_count=0,
+    )
+
+    monitoring_service = Mock(
+        spec=ReconciliationSLAMonitoringService,
+    )
+    monitoring_service.monitor_portfolio.return_value = (
+        monitoring_result
+    )
+
+    escalation_service = Mock(
+        spec=ReconciliationSLAEscalationService,
+    )
+    escalation_service.escalate.return_value = []
+
+    audit_service = Mock(
+        spec=ReconciliationSLAAuditService,
+    )
+    audit_service.record.return_value = audit
+
+    service = ReconciliationSLAAutomationService(
+        monitoring_service=monitoring_service,
+        escalation_service=escalation_service,
+        audit_service=audit_service,
+    )
+
+    result = service.run_portfolio(
+        portfolio_id=903,
+        as_of=as_of,
+        assignment_sla=timedelta(hours=2),
+        investigation_sla=timedelta(hours=4),
+        resolution_sla=timedelta(hours=24),
+    )
+
+    assert result.audit_record is audit
+    audit_service.record.assert_called_once_with(
+        portfolio_id=903,
+        automation_result=ANY,
+    )
+
+    recorded_result = (
+        audit_service.record.call_args.kwargs[
+            "automation_result"
+        ]
+    )
+
+    assert (
+        recorded_result.monitoring_result
+        is monitoring_result
+    )
+    assert (
+        recorded_result.escalated_exceptions
+        == []
     )

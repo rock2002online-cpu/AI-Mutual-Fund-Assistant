@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from models.reconciliation_exception import (
     ReconciliationException,
+)
+from models.reconciliation_sla_audit import (
+    ReconciliationSLAAudit,
 )
 from services.reconciliation_sla_escalation_service import (
     ReconciliationSLAEscalationService,
@@ -15,6 +19,11 @@ from services.reconciliation_sla_monitoring_service import (
     ReconciliationSLAMonitoringResult,
     ReconciliationSLAMonitoringService,
 )
+
+if TYPE_CHECKING:
+    from services.reconciliation_sla_audit_service import (
+        ReconciliationSLAAuditService,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +36,9 @@ class ReconciliationSLAAutomationResult:
     escalated_exceptions: list[
         ReconciliationException
     ]
+    audit_record: (
+        ReconciliationSLAAudit | None
+    ) = None
 
     @property
     def total_breaches(self) -> int:
@@ -52,7 +64,7 @@ class ReconciliationSLAAutomationResult:
 
 
 class ReconciliationSLAAutomationService:
-    """Coordinate portfolio SLA monitoring and escalation."""
+    """Coordinate monitoring, escalation, and audit persistence."""
 
     def __init__(
         self,
@@ -63,9 +75,13 @@ class ReconciliationSLAAutomationService:
         escalation_service: (
             ReconciliationSLAEscalationService
         ),
+        audit_service: (
+            ReconciliationSLAAuditService | None
+        ) = None,
     ) -> None:
         self._monitoring_service = monitoring_service
         self._escalation_service = escalation_service
+        self._audit_service = audit_service
 
     def run_portfolio(
         self,
@@ -76,7 +92,7 @@ class ReconciliationSLAAutomationService:
         investigation_sla: timedelta,
         resolution_sla: timedelta,
     ) -> ReconciliationSLAAutomationResult:
-        """Monitor and escalate SLA breaches for a portfolio."""
+        """Monitor, escalate, and audit a portfolio SLA run."""
 
         monitoring_result = (
             self._monitoring_service.monitor_portfolio(
@@ -95,11 +111,35 @@ class ReconciliationSLAAutomationService:
             )
         )
 
+        automation_result = (
+            ReconciliationSLAAutomationResult(
+                monitoring_result=(
+                    monitoring_result
+                ),
+                escalated_exceptions=(
+                    escalated_exceptions
+                ),
+            )
+        )
+
+        if self._audit_service is None:
+            return automation_result
+
+        audit_record = (
+            self._audit_service.record(
+                portfolio_id=portfolio_id,
+                automation_result=(
+                    automation_result
+                ),
+            )
+        )
+
         return ReconciliationSLAAutomationResult(
             monitoring_result=monitoring_result,
             escalated_exceptions=(
                 escalated_exceptions
             ),
+            audit_record=audit_record,
         )
 
 
