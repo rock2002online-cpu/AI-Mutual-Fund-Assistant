@@ -1,0 +1,109 @@
+"""Orchestrate reconciliation SLA monitoring and escalation."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from models.reconciliation_exception import (
+    ReconciliationException,
+)
+from services.reconciliation_sla_escalation_service import (
+    ReconciliationSLAEscalationService,
+)
+from services.reconciliation_sla_monitoring_service import (
+    ReconciliationSLAMonitoringResult,
+    ReconciliationSLAMonitoringService,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationSLAAutomationResult:
+    """Result of an automated reconciliation SLA run."""
+
+    monitoring_result: (
+        ReconciliationSLAMonitoringResult
+    )
+    escalated_exceptions: list[
+        ReconciliationException
+    ]
+
+    @property
+    def total_breaches(self) -> int:
+        """Return the total detected SLA breach count."""
+
+        return (
+            self.monitoring_result.total_breaches
+        )
+
+    @property
+    def escalated_count(self) -> int:
+        """Return the number of escalated exceptions."""
+
+        return len(
+            self.escalated_exceptions
+        )
+
+    @property
+    def has_escalations(self) -> bool:
+        """Return whether any exception was escalated."""
+
+        return self.escalated_count > 0
+
+
+class ReconciliationSLAAutomationService:
+    """Coordinate portfolio SLA monitoring and escalation."""
+
+    def __init__(
+        self,
+        *,
+        monitoring_service: (
+            ReconciliationSLAMonitoringService
+        ),
+        escalation_service: (
+            ReconciliationSLAEscalationService
+        ),
+    ) -> None:
+        self._monitoring_service = monitoring_service
+        self._escalation_service = escalation_service
+
+    def run_portfolio(
+        self,
+        *,
+        portfolio_id: int,
+        as_of: datetime,
+        assignment_sla: timedelta,
+        investigation_sla: timedelta,
+        resolution_sla: timedelta,
+    ) -> ReconciliationSLAAutomationResult:
+        """Monitor and escalate SLA breaches for a portfolio."""
+
+        monitoring_result = (
+            self._monitoring_service.monitor_portfolio(
+                portfolio_id=portfolio_id,
+                as_of=as_of,
+                assignment_sla=assignment_sla,
+                investigation_sla=investigation_sla,
+                resolution_sla=resolution_sla,
+            )
+        )
+
+        escalated_exceptions = (
+            self._escalation_service.escalate(
+                monitoring_result=monitoring_result,
+                escalated_at=as_of,
+            )
+        )
+
+        return ReconciliationSLAAutomationResult(
+            monitoring_result=monitoring_result,
+            escalated_exceptions=(
+                escalated_exceptions
+            ),
+        )
+
+
+__all__ = [
+    "ReconciliationSLAAutomationResult",
+    "ReconciliationSLAAutomationService",
+]
