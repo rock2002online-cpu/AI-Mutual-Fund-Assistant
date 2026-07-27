@@ -39,6 +39,15 @@ class ReconciliationSLASchedulerConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ReconciliationSLAJobStatus:
+    """Immutable observable status for a registered SLA job."""
+
+    job_id: str
+    interval: timedelta
+    next_run_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class _RegisteredReconciliationSLAJob:
     """Internal registration record for a recurring SLA job."""
 
@@ -240,8 +249,48 @@ class ReconciliationSLAScheduler:
 
         return tuple(self._registered_jobs)
 
+    @property
+    def job_statuses(
+        self,
+    ) -> tuple[ReconciliationSLAJobStatus, ...]:
+        """Return immutable snapshots for all registered jobs."""
+
+        return tuple(
+            self._status_from_registration(registration)
+            for registration in self._registered_jobs.values()
+        )
+
+    def get_job_status(
+        self,
+        *,
+        job_id: str,
+    ) -> ReconciliationSLAJobStatus:
+        """Return an immutable snapshot for one registered job."""
+
+        try:
+            registration = self._registered_jobs[job_id]
+        except KeyError as error:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not registered."
+            ) from error
+
+        return self._status_from_registration(registration)
+
+    @staticmethod
+    def _status_from_registration(
+        registration: _RegisteredReconciliationSLAJob,
+    ) -> ReconciliationSLAJobStatus:
+        """Build a public status without exposing scheduler internals."""
+
+        return ReconciliationSLAJobStatus(
+            job_id=registration.job_id,
+            interval=registration.interval,
+            next_run_at=registration.next_run_at,
+        )
+
 
 __all__ = [
+    "ReconciliationSLAJobStatus",
     "ReconciliationSLAScheduler",
     "ReconciliationSLASchedulerConfig",
     "ReconciliationSLASchedulerValidationError",
