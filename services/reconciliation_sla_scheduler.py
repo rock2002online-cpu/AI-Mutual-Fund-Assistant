@@ -28,6 +28,7 @@ class ReconciliationSLASchedulerConfig:
     """Immutable scheduler runtime configuration."""
 
     poll_interval: timedelta
+    execution_history_limit: int | None = None
 
     def __post_init__(self) -> None:
         """Validate scheduler configuration."""
@@ -35,6 +36,14 @@ class ReconciliationSLASchedulerConfig:
         if self.poll_interval <= timedelta(0):
             raise ReconciliationSLASchedulerValidationError(
                 "poll_interval must be positive."
+            )
+
+        if (
+            self.execution_history_limit is not None
+            and self.execution_history_limit <= 0
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "execution_history_limit must be positive."
             )
 
 
@@ -45,6 +54,77 @@ class ReconciliationSLAJobStatus:
     job_id: str
     interval: timedelta
     next_run_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationSLAJobExecution:
+    """Immutable record of one scheduler job execution."""
+
+    job_id: str
+    scheduled_at: datetime
+    succeeded: bool
+    error_message: str | None = None
+    completed_at: datetime | None = None
+    attempts_used: int | None = None
+
+    def __post_init__(self) -> None:
+        """Validate execution record data."""
+
+        if not self.job_id.strip():
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id must not be blank."
+            )
+
+        if (
+            self.scheduled_at.tzinfo is None
+            or self.scheduled_at.utcoffset() is None
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "scheduled_at must be timezone-aware."
+            )
+
+        if (
+            self.completed_at is not None
+            and (
+                self.completed_at.tzinfo is None
+                or self.completed_at.utcoffset() is None
+            )
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "completed_at must be timezone-aware."
+            )
+
+        if (
+            self.completed_at is not None
+            and self.completed_at < self.scheduled_at
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "completed_at cannot be before scheduled_at."
+            )
+
+        if self.succeeded and self.error_message is not None:
+            raise ReconciliationSLASchedulerValidationError(
+                "successful execution cannot have an error message."
+            )
+
+        if (
+            not self.succeeded
+            and (
+                self.error_message is None
+                or not self.error_message.strip()
+            )
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "failed execution must have an error message."
+            )
+
+        if (
+            self.attempts_used is not None
+            and self.attempts_used <= 0
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "attempts_used must be positive."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +154,9 @@ class ReconciliationSLAScheduler:
             str,
             _RegisteredReconciliationSLAJob,
         ] = {}
+        self._execution_history: list[
+            ReconciliationSLAJobExecution
+        ] = []
         self._is_running = False
 
     def register_job(
@@ -161,9 +244,33 @@ class ReconciliationSLAScheduler:
             if registration.next_run_at > as_of:
                 continue
 
-            results[registration.job_id] = (
-                registration.job.run_once(
+            try:
+                result = registration.job.run_once(
                     scheduled_at=registration.next_run_at,
+                )
+            except Exception as error:
+                self._record_execution(
+                    ReconciliationSLAJobExecution(
+                        job_id=registration.job_id,
+                        scheduled_at=registration.next_run_at,
+                        succeeded=False,
+                        error_message=str(error),
+                        completed_at=as_of,
+                    )
+                )
+                raise
+
+            results[registration.job_id] = result
+
+            self._record_execution(
+                ReconciliationSLAJobExecution(
+                    job_id=registration.job_id,
+                    scheduled_at=registration.next_run_at,
+                    succeeded=True,
+                    completed_at=as_of,
+                    attempts_used=(
+                        self._attempts_used_from_result(result)
+                    ),
                 )
             )
 
@@ -249,6 +356,105 @@ class ReconciliationSLAScheduler:
 
         return tuple(self._registered_jobs)
 
+    @staticmethod
+    def _attempts_used_from_result(
+        result: ReconciliationSLAScheduledJobResult,
+    ) -> int | None:
+        """Return a concrete attempts count when the result exposes one."""
+
+        attempts_used = getattr(
+            result,
+            "attempts_used",
+            None,
+        )
+
+        if type(attempts_used) is not int:
+            return None
+
+        return attempts_used
+
+    def _record_execution(
+        self,
+        execution: ReconciliationSLAJobExecution,
+    ) -> None:
+        """Record an execution and enforce configured retention."""
+
+        self._execution_history.append(execution)
+
+        limit = self._config.execution_history_limit
+
+        if (
+            limit is not None
+            and len(self._execution_history) > limit
+        ):
+            del self._execution_history[:-limit]
+
+    @property
+    def execution_history(
+        self,
+    ) -> tuple[ReconciliationSLAJobExecution, ...]:
+        """Return immutable snapshots of recorded executions."""
+
+        return tuple(self._execution_history)
+
+    def get_execution_history(
+        self,
+        *,
+        job_id: str,
+    ) -> tuple[ReconciliationSLAJobExecution, ...]:
+        """Return execution records for one job."""
+
+        if not job_id.strip():
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id must not be blank."
+            )
+
+        return tuple(
+            execution
+            for execution in self._execution_history
+            if execution.job_id == job_id
+        )
+    def get_latest_execution(
+        self,
+        *,
+        job_id: str,
+    ) -> ReconciliationSLAJobExecution:
+        """Return the most recent execution record for one job."""
+
+        history = self.get_execution_history(
+            job_id=job_id,
+        )
+
+        if not history:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id has no execution history."
+            )
+
+        return history[-1]
+
+    def clear_execution_history(self) -> None:
+        """Remove all recorded scheduler executions."""
+
+        self._execution_history.clear()
+
+    def remove_execution_history(
+        self,
+        *,
+        job_id: str,
+    ) -> None:
+        """Remove execution records belonging to one job."""
+
+        if not job_id.strip():
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id must not be blank."
+            )
+
+        self._execution_history[:] = [
+            execution
+            for execution in self._execution_history
+            if execution.job_id != job_id
+        ]
+
     @property
     def job_statuses(
         self,
@@ -290,6 +496,7 @@ class ReconciliationSLAScheduler:
 
 
 __all__ = [
+    "ReconciliationSLAJobExecution",
     "ReconciliationSLAJobStatus",
     "ReconciliationSLAScheduler",
     "ReconciliationSLASchedulerConfig",
