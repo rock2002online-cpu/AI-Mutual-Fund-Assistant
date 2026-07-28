@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Callable
+from typing import Callable, Protocol
 
 from services.reconciliation_sla_scheduled_job import (
     ReconciliationSLAScheduledJob,
@@ -126,7 +126,28 @@ class ReconciliationSLAJobExecution:
                 "attempts_used must be positive."
             )
 
+class ReconciliationSLAExecutionHistoryRepository(
+    Protocol
+):
+    """Persistence contract for scheduler execution history."""
 
+    def load_history(
+        self,
+    ) -> tuple[ReconciliationSLAJobExecution, ...]:
+        """Return persisted scheduler executions."""
+
+        ...
+
+    def save_history(
+        self,
+        executions: tuple[
+            ReconciliationSLAJobExecution,
+            ...,
+        ],
+    ) -> None:
+        """Replace persisted scheduler executions."""
+
+        ...
 @dataclass(frozen=True, slots=True)
 class _RegisteredReconciliationSLAJob:
     """Internal registration record for a recurring SLA job."""
@@ -146,17 +167,38 @@ class ReconciliationSLAScheduler:
         config: ReconciliationSLASchedulerConfig,
         clock: Callable[[], datetime] = _utc_now,
         delay: Callable[[float], None] = sleep,
+        execution_history_repository: (
+            ReconciliationSLAExecutionHistoryRepository | None
+        ) = None,
     ) -> None:
         self._config = config
         self._clock = clock
         self._delay = delay
+        self._execution_history_repository = (
+            execution_history_repository
+        )
         self._registered_jobs: dict[
             str,
             _RegisteredReconciliationSLAJob,
         ] = {}
-        self._execution_history: list[
-            ReconciliationSLAJobExecution
-        ] = []
+
+        if self._execution_history_repository is None:
+            self._execution_history: list[
+                ReconciliationSLAJobExecution
+            ] = []
+        else:
+            self._execution_history = list(
+                self._execution_history_repository.load_history()
+            )
+
+        limit = self._config.execution_history_limit
+
+        if (
+            limit is not None
+            and len(self._execution_history) > limit
+        ):
+            del self._execution_history[:-limit]
+
         self._is_running = False
 
     def register_job(
@@ -377,7 +419,7 @@ class ReconciliationSLAScheduler:
         self,
         execution: ReconciliationSLAJobExecution,
     ) -> None:
-        """Record an execution and enforce configured retention."""
+        """Record, retain, and persist a scheduler execution."""
 
         self._execution_history.append(execution)
 
@@ -388,6 +430,11 @@ class ReconciliationSLAScheduler:
             and len(self._execution_history) > limit
         ):
             del self._execution_history[:-limit]
+
+        if self._execution_history_repository is not None:
+            self._execution_history_repository.save_history(
+                tuple(self._execution_history)
+            )
 
     @property
     def execution_history(
@@ -433,16 +480,19 @@ class ReconciliationSLAScheduler:
         return history[-1]
 
     def clear_execution_history(self) -> None:
-        """Remove all recorded scheduler executions."""
+        """Remove all recorded and persisted scheduler executions."""
 
         self._execution_history.clear()
+
+        if self._execution_history_repository is not None:
+            self._execution_history_repository.save_history(())
 
     def remove_execution_history(
         self,
         *,
         job_id: str,
     ) -> None:
-        """Remove execution records belonging to one job."""
+        """Remove and persist execution history for one job."""
 
         if not job_id.strip():
             raise ReconciliationSLASchedulerValidationError(
@@ -455,6 +505,10 @@ class ReconciliationSLAScheduler:
             if execution.job_id != job_id
         ]
 
+        if self._execution_history_repository is not None:
+            self._execution_history_repository.save_history(
+                tuple(self._execution_history)
+            )
     @property
     def job_statuses(
         self,
@@ -496,6 +550,7 @@ class ReconciliationSLAScheduler:
 
 
 __all__ = [
+    "ReconciliationSLAExecutionHistoryRepository",
     "ReconciliationSLAJobExecution",
     "ReconciliationSLAJobStatus",
     "ReconciliationSLAScheduler",
