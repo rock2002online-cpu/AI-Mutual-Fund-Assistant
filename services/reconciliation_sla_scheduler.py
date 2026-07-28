@@ -66,6 +66,7 @@ class ReconciliationSLAJobStatus:
     job_id: str
     interval: timedelta
     next_run_at: datetime
+    is_paused: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +169,7 @@ class _RegisteredReconciliationSLAJob:
     job: ReconciliationSLAScheduledJob
     interval: timedelta
     next_run_at: datetime
+    is_paused: bool = False
 
 
 class ReconciliationSLAScheduler:
@@ -268,6 +270,54 @@ class ReconciliationSLAScheduler:
             )
 
         del self._registered_jobs[job_id]
+    def pause_job(
+        self,
+        *,
+        job_id: str,
+    ) -> None:
+        """Pause a registered reconciliation SLA job."""
+
+        self._set_job_paused(
+            job_id=job_id,
+            is_paused=True,
+        )
+
+    def resume_job(
+        self,
+        *,
+        job_id: str,
+    ) -> None:
+        """Resume a paused reconciliation SLA job."""
+
+        self._set_job_paused(
+            job_id=job_id,
+            is_paused=False,
+        )
+
+    def _set_job_paused(
+        self,
+        *,
+        job_id: str,
+        is_paused: bool,
+    ) -> None:
+        """Replace a registration with updated paused state."""
+
+        try:
+            registration = self._registered_jobs[job_id]
+        except KeyError as error:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not registered."
+            ) from error
+
+        self._registered_jobs[job_id] = (
+            _RegisteredReconciliationSLAJob(
+                job_id=registration.job_id,
+                job=registration.job,
+                interval=registration.interval,
+                next_run_at=registration.next_run_at,
+                is_paused=is_paused,
+            )
+        )
 
     def run_due_jobs(
         self,
@@ -295,6 +345,9 @@ class ReconciliationSLAScheduler:
         for registration in tuple(
             self._registered_jobs.values()
         ):
+            if registration.is_paused:
+                continue
+
             if registration.next_run_at > as_of:
                 continue
 
@@ -460,6 +513,7 @@ class ReconciliationSLAScheduler:
                 job=registration.job,
                 interval=registration.interval,
                 next_run_at=next_run_at,
+                is_paused=registration.is_paused,
             )
         )
 
@@ -594,6 +648,7 @@ class ReconciliationSLAScheduler:
             job_id=registration.job_id,
             interval=registration.interval,
             next_run_at=registration.next_run_at,
+            is_paused=registration.is_paused,
         )
 
 
