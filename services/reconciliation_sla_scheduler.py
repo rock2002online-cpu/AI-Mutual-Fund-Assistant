@@ -29,6 +29,7 @@ class ReconciliationSLASchedulerConfig:
 
     poll_interval: timedelta
     execution_history_limit: int | None = None
+    continue_on_job_failure: bool = False
 
     def __post_init__(self) -> None:
         """Validate scheduler configuration."""
@@ -36,6 +37,10 @@ class ReconciliationSLASchedulerConfig:
         if self.poll_interval <= timedelta(0):
             raise ReconciliationSLASchedulerValidationError(
                 "poll_interval must be positive."
+            )
+        if type(self.continue_on_job_failure) is not bool:
+            raise ReconciliationSLASchedulerValidationError(
+                "continue_on_job_failure must be a boolean."
             )
 
         if (
@@ -300,6 +305,11 @@ class ReconciliationSLAScheduler:
                         completed_at=as_of,
                     )
                 )
+
+                if self._config.continue_on_job_failure:
+                    self._advance_job_schedule(registration)
+                    continue
+
                 raise
 
             results[registration.job_id] = result
@@ -316,17 +326,7 @@ class ReconciliationSLAScheduler:
                 )
             )
 
-            self._registered_jobs[registration.job_id] = (
-                _RegisteredReconciliationSLAJob(
-                    job_id=registration.job_id,
-                    job=registration.job,
-                    interval=registration.interval,
-                    next_run_at=(
-                        registration.next_run_at
-                        + registration.interval
-                    ),
-                )
-            )
+            self._advance_job_schedule(registration)
 
         return results
 
@@ -414,6 +414,23 @@ class ReconciliationSLAScheduler:
             return None
 
         return attempts_used
+    def _advance_job_schedule(
+        self,
+        registration: _RegisteredReconciliationSLAJob,
+    ) -> None:
+        """Advance a registered job to its next occurrence."""
+
+        self._registered_jobs[registration.job_id] = (
+            _RegisteredReconciliationSLAJob(
+                job_id=registration.job_id,
+                job=registration.job,
+                interval=registration.interval,
+                next_run_at=(
+                    registration.next_run_at
+                    + registration.interval
+                ),
+            )
+        )
 
     def _record_execution(
         self,
