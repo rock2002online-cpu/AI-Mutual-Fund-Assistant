@@ -30,6 +30,7 @@ class ReconciliationSLASchedulerConfig:
     poll_interval: timedelta
     execution_history_limit: int | None = None
     continue_on_job_failure: bool = False
+    coalesce_missed_runs: bool = False
 
     def __post_init__(self) -> None:
         """Validate scheduler configuration."""
@@ -38,9 +39,15 @@ class ReconciliationSLASchedulerConfig:
             raise ReconciliationSLASchedulerValidationError(
                 "poll_interval must be positive."
             )
+
         if type(self.continue_on_job_failure) is not bool:
             raise ReconciliationSLASchedulerValidationError(
                 "continue_on_job_failure must be a boolean."
+            )
+
+        if type(self.coalesce_missed_runs) is not bool:
+            raise ReconciliationSLASchedulerValidationError(
+                "coalesce_missed_runs must be a boolean."
             )
 
         if (
@@ -307,7 +314,10 @@ class ReconciliationSLAScheduler:
                 )
 
                 if self._config.continue_on_job_failure:
-                    self._advance_job_schedule(registration)
+                    self._advance_job_schedule(
+                        registration,
+                        as_of=as_of,
+                    )
                     continue
 
                 raise
@@ -326,7 +336,10 @@ class ReconciliationSLAScheduler:
                 )
             )
 
-            self._advance_job_schedule(registration)
+            self._advance_job_schedule(
+                registration,
+                as_of=as_of,
+            )
 
         return results
 
@@ -417,18 +430,36 @@ class ReconciliationSLAScheduler:
     def _advance_job_schedule(
         self,
         registration: _RegisteredReconciliationSLAJob,
+        *,
+        as_of: datetime,
     ) -> None:
         """Advance a registered job to its next occurrence."""
+
+        next_run_at = (
+            registration.next_run_at
+            + registration.interval
+        )
+
+        if (
+            self._config.coalesce_missed_runs
+            and next_run_at <= as_of
+        ):
+            missed_intervals = (
+                (as_of - next_run_at)
+                // registration.interval
+                + 1
+            )
+            next_run_at += (
+                registration.interval
+                * missed_intervals
+            )
 
         self._registered_jobs[registration.job_id] = (
             _RegisteredReconciliationSLAJob(
                 job_id=registration.job_id,
                 job=registration.job,
                 interval=registration.interval,
-                next_run_at=(
-                    registration.next_run_at
-                    + registration.interval
-                ),
+                next_run_at=next_run_at,
             )
         )
 
