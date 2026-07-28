@@ -235,18 +235,10 @@ class ReconciliationSLAScheduler:
                 "job_id is already registered."
             )
 
-        if interval <= timedelta(0):
-            raise ReconciliationSLASchedulerValidationError(
-                "interval must be positive."
-            )
-
-        if (
-            next_run_at.tzinfo is None
-            or next_run_at.utcoffset() is None
-        ):
-            raise ReconciliationSLASchedulerValidationError(
-                "next_run_at must be timezone-aware."
-            )
+        self._validate_job_schedule(
+            interval=interval,
+            next_run_at=next_run_at,
+        )
 
         self._registered_jobs[job_id] = (
             _RegisteredReconciliationSLAJob(
@@ -293,7 +285,35 @@ class ReconciliationSLAScheduler:
             job_id=job_id,
             is_paused=False,
         )
+    def reschedule_job(
+        self,
+        *,
+        job_id: str,
+        interval: timedelta,
+        next_run_at: datetime,
+    ) -> None:
+        """Update the schedule of a registered reconciliation SLA job."""
 
+        try:
+            registration = self._registered_jobs[job_id]
+        except KeyError as error:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not registered."
+            ) from error
+        self._validate_job_schedule(
+            interval=interval,
+            next_run_at=next_run_at,
+        )
+
+        self._registered_jobs[job_id] = (
+            _RegisteredReconciliationSLAJob(
+                job_id=registration.job_id,
+                job=registration.job,
+                interval=interval,
+                next_run_at=next_run_at,
+                is_paused=registration.is_paused,
+            )
+        )
     def _set_job_paused(
         self,
         *,
@@ -480,6 +500,26 @@ class ReconciliationSLAScheduler:
             return None
 
         return attempts_used
+    @staticmethod
+    def _validate_job_schedule(
+        *,
+        interval: timedelta,
+        next_run_at: datetime,
+    ) -> None:
+        """Validate recurring scheduler timing values."""
+
+        if interval <= timedelta(0):
+            raise ReconciliationSLASchedulerValidationError(
+                "interval must be positive."
+            )
+
+        if (
+            next_run_at.tzinfo is None
+            or next_run_at.utcoffset() is None
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "next_run_at must be timezone-aware."
+            )
     def _advance_job_schedule(
         self,
         registration: _RegisteredReconciliationSLAJob,
