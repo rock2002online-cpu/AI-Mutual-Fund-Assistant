@@ -314,6 +314,56 @@ class ReconciliationSLAScheduler:
                 is_paused=registration.is_paused,
             )
         )
+    def run_job_now(
+        self,
+        *,
+        job_id: str,
+        as_of: datetime,
+    ) -> ReconciliationSLAScheduledJobResult:
+        """Execute one registered reconciliation SLA job immediately."""
+
+        try:
+            registration = self._registered_jobs[job_id]
+        except KeyError as error:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not registered."
+            ) from error
+        if registration.is_paused:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is paused."
+            )
+
+        self._validate_as_of(as_of)
+
+        try:
+            result = registration.job.run_once(
+                scheduled_at=as_of,
+            )
+        except Exception as error:
+            self._record_execution(
+                ReconciliationSLAJobExecution(
+                    job_id=registration.job_id,
+                    scheduled_at=as_of,
+                    succeeded=False,
+                    error_message=str(error),
+                    completed_at=as_of,
+                )
+            )
+            raise
+
+        self._record_execution(
+            ReconciliationSLAJobExecution(
+                job_id=registration.job_id,
+                scheduled_at=as_of,
+                succeeded=True,
+                completed_at=as_of,
+                attempts_used=(
+                    self._attempts_used_from_result(result)
+                ),
+            )
+        )
+
+        return result
     def _set_job_paused(
         self,
         *,
@@ -349,14 +399,7 @@ class ReconciliationSLAScheduler:
     ]:
         """Execute due jobs and advance successful schedules."""
 
-        if (
-            as_of.tzinfo is None
-            or as_of.utcoffset() is None
-        ):
-            raise ReconciliationSLASchedulerValidationError(
-                "as_of must be timezone-aware."
-            )
-
+        self._validate_as_of(as_of)
         results: dict[
             str,
             ReconciliationSLAScheduledJobResult,
@@ -500,6 +543,19 @@ class ReconciliationSLAScheduler:
             return None
 
         return attempts_used
+    @staticmethod
+    def _validate_as_of(
+        as_of: datetime,
+    ) -> None:
+        """Validate a scheduler execution timestamp."""
+
+        if (
+            as_of.tzinfo is None
+            or as_of.utcoffset() is None
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "as_of must be timezone-aware."
+            )
     @staticmethod
     def _validate_job_schedule(
         *,
