@@ -69,6 +69,42 @@ class ReconciliationSLAJobStatus:
     is_paused: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class ReconciliationSLARecoveryReport:
+    """Immutable result of one scheduler recovery operation."""
+
+    recovered_job_ids: tuple[str, ...]
+    missing_job_ids: tuple[str, ...]
+    pending_job_ids: tuple[str, ...]
+
+    @property
+    def recovered_job_count(self) -> int:
+        """Return the number of successfully recovered jobs."""
+
+        return len(self.recovered_job_ids)
+
+    @property
+    def missing_job_count(self) -> int:
+        """Return the number of runtime jobs without persisted state."""
+
+        return len(self.missing_job_ids)
+
+    @property
+    def pending_job_count(self) -> int:
+        """Return the number of persisted jobs still awaiting recovery."""
+
+        return len(self.pending_job_ids)
+
+    @property
+    def is_complete(self) -> bool:
+        """Return whether recovery has no missing or pending jobs."""
+
+        return (
+            not self.missing_job_ids
+            and not self.pending_job_ids
+        )
+
+
 class ReconciliationSLAJobStateRepository(Protocol):
     """Persistence contract for scheduler job states."""
 
@@ -359,6 +395,40 @@ class ReconciliationSLAScheduler:
             recovered_job_ids.append(job_id)
 
         return tuple(recovered_job_ids)
+
+    def recover_jobs_with_report(
+        self,
+        *,
+        jobs_by_id: dict[
+            str,
+            ReconciliationSLAScheduledJob,
+        ],
+    ) -> ReconciliationSLARecoveryReport:
+        """Recover jobs and report missing and pending states."""
+
+        pending_job_ids = set(
+            self.pending_recovery_job_ids
+        )
+        recoverable_jobs = {
+            job_id: job
+            for job_id, job in jobs_by_id.items()
+            if job_id in pending_job_ids
+        }
+        missing_job_ids = tuple(
+            job_id
+            for job_id in jobs_by_id
+            if job_id not in pending_job_ids
+        )
+
+        recovered_job_ids = self.recover_jobs(
+            jobs_by_id=recoverable_jobs,
+        )
+
+        return ReconciliationSLARecoveryReport(
+            recovered_job_ids=recovered_job_ids,
+            missing_job_ids=missing_job_ids,
+            pending_job_ids=self.pending_recovery_job_ids,
+        )
 
     def unregister_job(
         self,
@@ -933,4 +1003,5 @@ __all__ = [
     "ReconciliationSLAScheduler",
     "ReconciliationSLASchedulerConfig",
     "ReconciliationSLASchedulerValidationError",
+    "ReconciliationSLARecoveryReport",
 ]
