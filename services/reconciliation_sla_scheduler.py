@@ -69,6 +69,25 @@ class ReconciliationSLAJobStatus:
     is_paused: bool = False
 
 
+class ReconciliationSLAJobStateRepository(Protocol):
+    """Persistence contract for scheduler job states."""
+
+    def load_job_statuses(
+        self,
+    ) -> tuple[ReconciliationSLAJobStatus, ...]:
+        """Return persisted scheduler job states."""
+
+        ...
+
+    def save_job_statuses(
+        self,
+        statuses: tuple[ReconciliationSLAJobStatus, ...],
+    ) -> None:
+        """Replace persisted scheduler job states."""
+
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class ReconciliationSLAJobExecution:
     """Immutable record of one scheduler job execution."""
@@ -184,6 +203,9 @@ class ReconciliationSLAScheduler:
         execution_history_repository: (
             ReconciliationSLAExecutionHistoryRepository | None
         ) = None,
+        job_state_repository: (
+            ReconciliationSLAJobStateRepository | None
+        ) = None,
     ) -> None:
         self._config = config
         self._clock = clock
@@ -191,6 +213,18 @@ class ReconciliationSLAScheduler:
         self._execution_history_repository = (
             execution_history_repository
         )
+        self._job_state_repository = job_state_repository
+        if self._job_state_repository is None:
+            self._persisted_job_statuses: dict[
+                str,
+                ReconciliationSLAJobStatus,
+            ] = {}
+        else:
+            self._persisted_job_statuses = {
+                status.job_id: status
+                for status
+                in self._job_state_repository.load_job_statuses()
+            }
         self._registered_jobs: dict[
             str,
             _RegisteredReconciliationSLAJob,
@@ -239,6 +273,20 @@ class ReconciliationSLAScheduler:
             interval=interval,
             next_run_at=next_run_at,
         )
+        persisted_status = self._persisted_job_statuses.get(
+            job_id
+        )
+
+        if persisted_status is not None:
+            self._validate_job_schedule(
+                interval=persisted_status.interval,
+                next_run_at=persisted_status.next_run_at,
+            )
+            interval = persisted_status.interval
+            next_run_at = persisted_status.next_run_at
+            is_paused = persisted_status.is_paused
+        else:
+            is_paused = False
 
         self._registered_jobs[job_id] = (
             _RegisteredReconciliationSLAJob(
@@ -246,8 +294,11 @@ class ReconciliationSLAScheduler:
                 job=job,
                 interval=interval,
                 next_run_at=next_run_at,
+                is_paused=is_paused,
             )
         )
+
+        self._persist_job_statuses()
 
     def unregister_job(
         self,
@@ -262,6 +313,12 @@ class ReconciliationSLAScheduler:
             )
 
         del self._registered_jobs[job_id]
+        self._persisted_job_statuses.pop(
+            job_id,
+            None,
+        )
+
+        self._persist_job_statuses()
     def pause_job(
         self,
         *,
@@ -314,6 +371,7 @@ class ReconciliationSLAScheduler:
                 is_paused=registration.is_paused,
             )
         )
+        self._persist_job_statuses()
     def run_job_now(
         self,
         *,
@@ -388,6 +446,7 @@ class ReconciliationSLAScheduler:
                 is_paused=is_paused,
             )
         )
+        self._persist_job_statuses()
 
     def run_due_jobs(
         self,
@@ -612,7 +671,21 @@ class ReconciliationSLAScheduler:
                 is_paused=registration.is_paused,
             )
         )
+        self._persist_job_statuses()
+    def _persist_job_statuses(self) -> None:
+        """Persist registered and pending restored job states."""
 
+        if self._job_state_repository is None:
+            return
+
+        for status in self.job_statuses:
+            self._persisted_job_statuses[
+                status.job_id
+            ] = status
+
+        self._job_state_repository.save_job_statuses(
+            tuple(self._persisted_job_statuses.values())
+        )
     def _record_execution(
         self,
         execution: ReconciliationSLAJobExecution,
