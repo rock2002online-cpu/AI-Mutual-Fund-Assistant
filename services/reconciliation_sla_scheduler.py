@@ -300,6 +300,66 @@ class ReconciliationSLAScheduler:
 
         self._persist_job_statuses()
 
+    def recover_job(
+        self,
+        *,
+        job_id: str,
+        job: ReconciliationSLAScheduledJob,
+    ) -> None:
+        """Register a runtime job using its persisted scheduler state."""
+
+        try:
+            persisted_status = self._persisted_job_statuses[
+                job_id
+            ]
+        except KeyError as error:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not pending recovery."
+            ) from error
+
+        if job_id in self._registered_jobs:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is already registered."
+            )
+
+        self.register_job(
+            job_id=job_id,
+            job=job,
+            interval=persisted_status.interval,
+            next_run_at=persisted_status.next_run_at,
+        )
+
+    def recover_jobs(
+        self,
+        *,
+        jobs_by_id: dict[
+            str,
+            ReconciliationSLAScheduledJob,
+        ],
+    ) -> tuple[str, ...]:
+        """Atomically register runtime jobs from persisted states."""
+
+        pending_job_ids = set(
+            self.pending_recovery_job_ids
+        )
+
+        for job_id in jobs_by_id:
+            if job_id not in pending_job_ids:
+                raise ReconciliationSLASchedulerValidationError(
+                    "job_id is not pending recovery."
+                )
+
+        recovered_job_ids: list[str] = []
+
+        for job_id, job in jobs_by_id.items():
+            self.recover_job(
+                job_id=job_id,
+                job=job,
+            )
+            recovered_job_ids.append(job_id)
+
+        return tuple(recovered_job_ids)
+
     def unregister_job(
         self,
         *,
@@ -319,6 +379,28 @@ class ReconciliationSLAScheduler:
         )
 
         self._persist_job_statuses()
+
+    def discard_pending_recovery(
+        self,
+        *,
+        job_id: str,
+    ) -> None:
+        """Remove an obsolete persisted state awaiting recovery."""
+
+        if job_id in self._registered_jobs:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is already registered."
+            )
+
+        if job_id not in self._persisted_job_statuses:
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id is not pending recovery."
+            )
+
+        del self._persisted_job_statuses[job_id]
+
+        self._persist_job_statuses()
+
     def pause_job(
         self,
         *,
@@ -585,6 +667,29 @@ class ReconciliationSLAScheduler:
         """Return registered job identifiers in registration order."""
 
         return tuple(self._registered_jobs)
+
+    @property
+    def pending_recovery_job_ids(self) -> tuple[str, ...]:
+        """Return persisted job IDs awaiting runtime registration."""
+
+        return tuple(
+            job_id
+            for job_id in self._persisted_job_statuses
+            if job_id not in self._registered_jobs
+        )
+
+    @property
+    def pending_recovery_job_statuses(
+        self,
+    ) -> tuple[ReconciliationSLAJobStatus, ...]:
+        """Return persisted job states awaiting runtime registration."""
+
+        return tuple(
+            status
+            for job_id, status
+            in self._persisted_job_statuses.items()
+            if job_id not in self._registered_jobs
+        )
 
     @staticmethod
     def _attempts_used_from_result(
