@@ -29,6 +29,7 @@ class ReconciliationSLASchedulerConfig:
 
     poll_interval: timedelta
     execution_history_limit: int | None = None
+    recovery_history_limit: int | None = None
     continue_on_job_failure: bool = False
     coalesce_missed_runs: bool = False
 
@@ -58,6 +59,14 @@ class ReconciliationSLASchedulerConfig:
                 "execution_history_limit must be positive."
             )
 
+        if (
+            self.recovery_history_limit is not None
+            and self.recovery_history_limit <= 0
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "recovery_history_limit must be positive."
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationSLAJobStatus:
@@ -76,6 +85,18 @@ class ReconciliationSLARecoveryReport:
     recovered_job_ids: tuple[str, ...]
     missing_job_ids: tuple[str, ...]
     pending_job_ids: tuple[str, ...]
+    recorded_at: datetime
+
+    def __post_init__(self) -> None:
+        """Validate recovery audit report data."""
+
+        if (
+            self.recorded_at.tzinfo is None
+            or self.recorded_at.utcoffset() is None
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "recorded_at must be timezone-aware."
+            )
 
     @property
     def recovered_job_count(self) -> int:
@@ -266,6 +287,10 @@ class ReconciliationSLAScheduler:
             _RegisteredReconciliationSLAJob,
         ] = {}
 
+        self._recovery_history: list[
+            ReconciliationSLARecoveryReport
+        ] = []
+
         if self._execution_history_repository is None:
             self._execution_history: list[
                 ReconciliationSLAJobExecution
@@ -424,11 +449,22 @@ class ReconciliationSLAScheduler:
             jobs_by_id=recoverable_jobs,
         )
 
-        return ReconciliationSLARecoveryReport(
+        report = ReconciliationSLARecoveryReport(
             recovered_job_ids=recovered_job_ids,
             missing_job_ids=missing_job_ids,
             pending_job_ids=self.pending_recovery_job_ids,
+            recorded_at=self._clock(),
         )
+        self._recovery_history.append(report)
+        limit = self._config.recovery_history_limit
+
+        if (
+            limit is not None
+            and len(self._recovery_history) > limit
+        ):
+            del self._recovery_history[:-limit]
+
+        return report
 
     def unregister_job(
         self,
@@ -889,6 +925,19 @@ class ReconciliationSLAScheduler:
         """Return immutable snapshots of recorded executions."""
 
         return tuple(self._execution_history)
+
+    @property
+    def recovery_history(
+        self,
+    ) -> tuple[ReconciliationSLARecoveryReport, ...]:
+        """Return immutable snapshots of recovery reports."""
+
+        return tuple(self._recovery_history)
+
+    def clear_recovery_history(self) -> None:
+        """Remove all in-memory scheduler recovery audit reports."""
+
+        self._recovery_history.clear()
 
     def get_execution_history(
         self,
