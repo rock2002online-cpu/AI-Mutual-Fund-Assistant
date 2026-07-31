@@ -144,6 +144,28 @@ class ReconciliationSLAJobStateRepository(Protocol):
 
         ...
 
+class ReconciliationSLARecoveryHistoryRepository(
+    Protocol
+):
+    """Persistence contract for scheduler recovery history."""
+
+    def load_history(
+        self,
+    ) -> tuple[ReconciliationSLARecoveryReport, ...]:
+        """Return persisted scheduler recovery reports."""
+
+        ...
+
+    def save_history(
+        self,
+        reports: tuple[
+            ReconciliationSLARecoveryReport,
+            ...,
+        ],
+    ) -> None:
+        """Replace persisted scheduler recovery reports."""
+
+        ...
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationSLAJobExecution:
@@ -263,6 +285,9 @@ class ReconciliationSLAScheduler:
         job_state_repository: (
             ReconciliationSLAJobStateRepository | None
         ) = None,
+        recovery_history_repository: (
+            ReconciliationSLARecoveryHistoryRepository | None
+        ) = None,
     ) -> None:
         self._config = config
         self._clock = clock
@@ -287,9 +312,28 @@ class ReconciliationSLAScheduler:
             _RegisteredReconciliationSLAJob,
         ] = {}
 
-        self._recovery_history: list[
-            ReconciliationSLARecoveryReport
-        ] = []
+        self._recovery_history_repository = (
+            recovery_history_repository
+        )
+
+        if self._recovery_history_repository is None:
+            self._recovery_history: list[
+                ReconciliationSLARecoveryReport
+            ] = []
+        else:
+            self._recovery_history = list(
+                self._recovery_history_repository.load_history()
+            )
+
+        recovery_limit = (
+            self._config.recovery_history_limit
+        )
+
+        if (
+            recovery_limit is not None
+            and len(self._recovery_history) > recovery_limit
+        ):
+            del self._recovery_history[:-recovery_limit]
 
         if self._execution_history_repository is None:
             self._execution_history: list[
@@ -463,6 +507,11 @@ class ReconciliationSLAScheduler:
             and len(self._recovery_history) > limit
         ):
             del self._recovery_history[:-limit]
+
+        if self._recovery_history_repository is not None:
+            self._recovery_history_repository.save_history(
+                tuple(self._recovery_history)
+            )
 
         return report
 
@@ -935,9 +984,12 @@ class ReconciliationSLAScheduler:
         return tuple(self._recovery_history)
 
     def clear_recovery_history(self) -> None:
-        """Remove all in-memory scheduler recovery audit reports."""
+        """Remove all in-memory and persisted recovery reports."""
 
         self._recovery_history.clear()
+
+        if self._recovery_history_repository is not None:
+            self._recovery_history_repository.save_history(())
 
     def get_execution_history(
         self,
@@ -1053,4 +1105,5 @@ __all__ = [
     "ReconciliationSLASchedulerConfig",
     "ReconciliationSLASchedulerValidationError",
     "ReconciliationSLARecoveryReport",
+    "ReconciliationSLARecoveryHistoryRepository",
 ]
