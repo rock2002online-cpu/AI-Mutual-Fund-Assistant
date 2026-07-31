@@ -144,6 +144,7 @@ class ReconciliationSLAJobStateRepository(Protocol):
 
         ...
 
+
 class ReconciliationSLARecoveryHistoryRepository(
     Protocol
 ):
@@ -166,6 +167,7 @@ class ReconciliationSLARecoveryHistoryRepository(
         """Replace persisted scheduler recovery reports."""
 
         ...
+
 
 @dataclass(frozen=True, slots=True)
 class ReconciliationSLAJobExecution:
@@ -982,6 +984,67 @@ class ReconciliationSLAScheduler:
         """Return immutable snapshots of recovery reports."""
 
         return tuple(self._recovery_history)
+
+    def get_latest_recovery_report(
+        self,
+    ) -> ReconciliationSLARecoveryReport:
+        """Return the most recent scheduler recovery report."""
+
+        if not self._recovery_history:
+            raise ReconciliationSLASchedulerValidationError(
+                "recovery history is empty."
+            )
+
+        return self._recovery_history[-1]
+
+    def get_recovery_history(
+        self,
+        *,
+        is_complete: bool | None = None,
+        job_id: str | None = None,
+    ) -> tuple[ReconciliationSLARecoveryReport, ...]:
+        """Return recovery reports filtered by outcome or job ID."""
+
+        if (
+            job_id is not None
+            and (
+                not isinstance(job_id, str)
+                or not job_id.strip()
+            )
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "job_id must not be blank."
+            )
+
+        if (
+            is_complete is not None
+            and type(is_complete) is not bool
+        ):
+            raise ReconciliationSLASchedulerValidationError(
+                "is_complete must be a boolean."
+            )
+
+        reports = self.recovery_history
+
+        if is_complete is not None:
+            reports = tuple(
+                report
+                for report in reports
+                if report.is_complete is is_complete
+            )
+
+        if job_id is not None:
+            reports = tuple(
+                report
+                for report in reports
+                if (
+                    job_id in report.recovered_job_ids
+                    or job_id in report.missing_job_ids
+                    or job_id in report.pending_job_ids
+                )
+            )
+
+        return reports
 
     def clear_recovery_history(self) -> None:
         """Remove all in-memory and persisted recovery reports."""
