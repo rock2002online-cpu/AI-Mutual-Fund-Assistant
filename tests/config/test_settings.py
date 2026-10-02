@@ -113,7 +113,7 @@ def test_build_settings_uses_defaults(
     )
 
     assert settings.application_name == "AI Mutual Fund Assistant"
-    assert settings.application_version == "9.0.0"
+    assert settings.application_version == "37.0.0"
     assert (
         settings.environment
         is ApplicationEnvironment.DEVELOPMENT
@@ -428,7 +428,7 @@ def test_application_settings_as_mapping_is_immutable(
     result = settings.as_mapping()
 
     assert isinstance(result, MappingProxyType)
-    assert result["application_version"] == "9.0.0"
+    assert result["application_version"] == "37.0.0"
     assert result["environment"] == "development"
 
     with pytest.raises(TypeError):

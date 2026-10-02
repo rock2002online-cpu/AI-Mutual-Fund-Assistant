@@ -87,7 +87,7 @@ ENV_ENABLE_ADVANCED_ANALYTICS: Final[str] = (
 DEFAULT_APPLICATION_NAME: Final[str] = (
     "AI Mutual Fund Assistant"
 )
-DEFAULT_APPLICATION_VERSION: Final[str] = "9.0.0"
+DEFAULT_APPLICATION_VERSION: Final[str] = "37.0.0"
 DEFAULT_ENVIRONMENT: Final[str] = "development"
 DEFAULT_LOG_LEVEL: Final[str] = "INFO"
 
